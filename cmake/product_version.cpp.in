@@ -1,0 +1,22 @@
+#include "product_version.h"
+
+std::string getProductVersion()
+{
+  return "@Product_VERSION@.@SHORT_COMMIT_HASH@";
+}
+unsigned getProductVersionMajor()
+{
+  return @Product_VERSION_MAJOR@ +0;
+}
+unsigned getProductVersionMinor()
+{
+  return @Product_VERSION_MINOR@ +0;
+}
+unsigned getProductVersionPatch()
+{
+  return @Product_VERSION_PATCH@ +0;
+}
+unsigned getProductVersionTweak()
+{
+  return @BUILD_NUMBER@ +0;
+}

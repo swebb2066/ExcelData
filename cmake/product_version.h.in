@@ -1,0 +1,6 @@
+#include <string>
+std::string getProductVersion();
+unsigned getProductVersionMajor();
+unsigned getProductVersionMinor();
+unsigned getProductVersionPatch();
+unsigned getProductVersionTweak();
