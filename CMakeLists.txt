@@ -19,6 +19,7 @@ target_include_directories(excel2csv
 target_link_libraries(excel2csv
   PRIVATE
     Foundation
+    comsuppw
     ole32
     oleaut32
     uuid

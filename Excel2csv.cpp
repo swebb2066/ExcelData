@@ -141,9 +141,9 @@ class CellRowIterator : public Foundation::Iterator<Excel::CellRow>
 protected: // Attributes
     FileIteratorPtr m_fileIter;
     Excel::Book m_currentBook;
-    Excel::SheetIterator m_sheetIter;
+    Excel::Sheet::Iterator m_sheetIter;
     std::string m_sheetPattern;
-    Excel::RowIterator m_rowIter;
+    Excel::Range::Iterator m_rowIter;
     std::string m_cellPattern;
 
 public: // ...structors
@@ -175,12 +175,7 @@ public: // Methods
     {
         m_item.clear();
         m_fileIter->Start();
-        while (!m_fileIter->Off())
-        {
-            if (StartBook())
-                break;
-            m_fileIter->Forth();
-        }
+        StartBook();
     }
 
     /// Move to the next item. Precondition: !Off()
@@ -193,41 +188,43 @@ public: // Methods
         else
         {
             m_sheetIter.Forth();
-            if (m_sheetIter.Off() || !StartSheet())
+            if (!StartSheet())
             {
                 m_fileIter->Forth();
-                while (!m_fileIter->Off())
-                {
-                    if (StartBook())
-                        break;
-                    m_fileIter->Forth();
-                }
+                StartBook();
             }
         }
     }
 
 protected: // Support methods
-    /// Load the first sheet in the current file. Precondition: !m_fileIter->Off()
+    /// Load the first sheet in the current file. Precondition: m_currentBook.CanLoad()
     bool StartBook()
     {
         LOG4CXX_DEBUG(m_log, "At: " << m_fileIter->Item());
         bool result = false;
-        if (m_currentBook.CanLoad() && m_currentBook.Load(m_fileIter->Item()))
+        while (!m_fileIter->Off() && m_currentBook.Load(m_fileIter->Item()))
         {
             m_sheetIter.Start(m_currentBook, m_sheetPattern);
-            if (!m_sheetIter.Off())
-                result = StartSheet();
+            if (result = StartSheet())
+                break;
+            m_fileIter->Forth();
         }
         return result;
     }
 
-    /// Set m_rowIter. Precondition: !m_sheetIter.Off()
+    /// Set m_rowIter to a sheet row
     bool StartSheet()
     {
         bool result = false;
-        m_rowIter.Start(m_sheetIter.Item(), m_cellPattern);
-        if (!m_rowIter.Off())
-            result = SetItem();
+        while (!m_sheetIter.Off())
+        {
+            m_rowIter.Start(m_sheetIter.Item(), m_cellPattern);
+            if (!m_rowIter.Off())
+                result = SetItem();
+            if (result)
+                break;
+            m_sheetIter.Forth();
+        }
         return result;
     }
 
@@ -471,7 +468,7 @@ int main(int argc, char* argv[])
         fs::current_path(inputPath, ec);
     }
 
-    static auto log_s = Foundation::GetLogger("excel2csv");
+    auto log_s = Foundation::GetLogger("excel2csv");
     // Separate this instance of log messages
     Foundation::UserAndVersionLogMessage(log_s);
     LOG4CXX_DEBUG(log_s, "inputPath " << inputPath);
@@ -482,8 +479,6 @@ int main(int argc, char* argv[])
     else
         mapfile = vm["map-file"].as<std::string>();
 
-    if (!inputPath.empty() && exists(inputPath) && exists(inputPath / mapfile.filename()))
-        mapfile = inputPath / mapfile.filename();
     if (!exists(mapfile))
     {
         LOG4CXX_ERROR(log_s, mapfile << ": not found");
