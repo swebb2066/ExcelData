@@ -143,7 +143,7 @@ protected: // Attributes
     Excel::Book m_currentBook;
     Excel::Sheet::Iterator m_sheetIter;
     std::string m_sheetPattern;
-    Excel::Range::Iterator m_rowIter;
+    Excel::Rows::Iterator m_rowIter;
     std::string m_cellPattern;
 
 public: // ...structors
@@ -200,7 +200,7 @@ protected: // Support methods
     /// Load the first sheet in the current file. Precondition: m_currentBook.CanLoad()
     bool StartBook()
     {
-        LOG4CXX_DEBUG(m_log, "At: " << m_fileIter->Item());
+        LOG4CXX_DEBUG(m_log, "StartBook: " << m_fileIter->Item());
         bool result = false;
         while (!m_fileIter->Off() && m_currentBook.Load(m_fileIter->Item()))
         {
@@ -218,9 +218,12 @@ protected: // Support methods
         bool result = false;
         while (!m_sheetIter.Off())
         {
-            m_rowIter.Start(m_sheetIter.Item(), m_cellPattern);
+            m_rowIter.Start(m_sheetIter.Item());
             if (!m_rowIter.Off())
+            {
+                LOG4CXX_DEBUG(m_log, "StartSheet: " << m_sheetIter.Item().GetName());
                 result = SetItem();
+            }
             if (result)
                 break;
             m_sheetIter.Forth();
@@ -232,6 +235,7 @@ protected: // Support methods
     bool SetItem()
     {
         m_item = m_rowIter.Item();
+        LOG4CXX_DEBUG(m_log, "At: " << m_rowIter.Item());
         return !m_item.empty();
     }
     

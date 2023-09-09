@@ -10,22 +10,22 @@
 #include <regex>
 #include <exception>
 #include "Excel.h"
+#include <Foundation/SafeArrayWrapper.h>
 #include <Foundation/Logger.h>
 #include "comutil.h"
 
 namespace
 {
 
-struct GUIDComparer
-{
-    bool operator()(const GUID& left, const GUID& right) const
-    {
-        return memcmp(&left, &right, sizeof(right)) < 0;
-    }
-};
-
 void logMembers(const Foundation::LoggerPtr& log, IDispatch* pObj, LCID lcid)
 {
+    struct GUIDComparer
+    {
+        bool operator()(const GUID& left, const GUID& right) const
+        {
+            return memcmp(&left, &right, sizeof(right)) < 0;
+        }
+    };
     static std::map<GUID, int, GUIDComparer> alreadyLogged;
     UINT tinfoCount = 0;
     if (!log->isDebugEnabled() || FAILED(pObj->GetTypeInfoCount(&tinfoCount)))
@@ -79,62 +79,7 @@ void logMembers(const Foundation::LoggerPtr& log, IDispatch* pObj, LCID lcid)
     }
 }
 
-HRESULT SetHidden(IDispatch* pObject);
-HRESULT GetXLCell(IDispatch* pXLWorksheet, wchar_t* pszRange, wchar_t* pszCell, size_t iBufferLength);
-HRESULT GetCell(IDispatch* pXLSheet, wchar_t* pszRange, VARIANT& pVt);
-IDispatch* GetDispatchObject(IDispatch* pObject, DISPID dispid, WORD wFlags, LCID lcid, const std::string& objectName);
-
-IDispatch* StartExcel(LCID* plcid = 0)
-{
-    struct excelInstance
-    {
-        LCID lcid;
-        IDispatch* pXLApp;
-        IDispatch* pXLWorkBooks;
-        excelInstance() : lcid(GetUserDefaultLCID()), pXLApp(NULL), pXLWorkBooks(NULL)
-        {
-            if (FAILED(CoInitialize(NULL)))
-                throw std::runtime_error("Failed to initialize COM Subsystem");
-            const CLSID  CLSID_XLApplication = {0x00024500,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
-            const IID    IID_Application     = {0x000208D5,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
-            HRESULT      hr                  = CoCreateInstance
-                ( CLSID_XLApplication
-                , NULL
-                , CLSCTX_LOCAL_SERVER
-                , IID_Application
-                , (void**)&pXLApp
-                );
-            if (SUCCEEDED(hr) && pXLApp)
-            {
-                logMembers(Foundation::GetLogger("OLE.Excel"), pXLApp, this->lcid);
-                SetHidden(pXLApp);
-                pXLWorkBooks = GetDispatchObject(pXLApp, 572, DISPATCH_PROPERTYGET, this->lcid, "Workbooks");
-            }
-        }
-        ~excelInstance()
-        {
-            if (pXLWorkBooks)
-            {
-                pXLWorkBooks->Release();
-                pXLWorkBooks = NULL;
-            }
-            if (pXLApp)
-            {
-                DISPPARAMS NoArgs = {NULL,NULL,0,0};
-                pXLApp->Invoke(0x12e, IID_NULL, LOCALE_USER_DEFAULT ,DISPATCH_METHOD ,&NoArgs ,NULL,NULL,NULL); // pXLApp->Quit() 0x12E
-                pXLApp->Release();
-                pXLApp = NULL;
-            }
-            CoUninitialize();
-        }
-    };
-    static excelInstance instance;
-    if (plcid)
-        *plcid = instance.lcid;
-    return instance.pXLWorkBooks;
-}
-
-HRESULT SetHidden(IDispatch* pObject)
+HRESULT SetHidden(IDispatch* pObject, LCID lcid)
 {
     VARIANT      vArgArray[1];
     VARIANT      vResult;
@@ -144,122 +89,13 @@ HRESULT SetHidden(IDispatch* pObject)
     vArgArray[0].boolVal = FALSE;
 
     DISPID          dispidNamed   = DISPID_PROPERTYPUT;
-    LCID            lcid          = GetUserDefaultLCID();
     DISPPARAMS      dispParams;
     dispParams.rgvarg             = vArgArray;
     dispParams.rgdispidNamedArgs  = &dispidNamed;
     dispParams.cArgs              = 1;
     dispParams.cNamedArgs         = 1;
-    HRESULT hr = pObject->Invoke(0x0000022e, IID_NULL, lcid, DISPATCH_PROPERTYPUT, &dispParams, &vResult, NULL,NULL);
-
-    return hr;
+    return pObject->Invoke(0x22e, IID_NULL, lcid, DISPATCH_PROPERTYPUT, &dispParams, &vResult, NULL,NULL);
 }
-
-
-HRESULT GetXLCell(IDispatch* pXLWorksheet, wchar_t* pszRange, wchar_t* pszCell, size_t iBufferLength)
-{
-    VARIANT         vArgArray[1];
-    VARIANT         vResult;
-    DISPPARAMS      DispParams;
-    LCID            lcid;
-
-    VariantInit(&vResult);
-    lcid                           = GetUserDefaultLCID();
-    vArgArray[0].vt                = VT_BSTR,
-    vArgArray[0].bstrVal           = SysAllocString(pszRange);
-    DispParams.rgvarg              = vArgArray;
-    DispParams.rgdispidNamedArgs   = 0;
-    DispParams.cArgs               = 1;
-    DispParams.cNamedArgs          = 0;
-    HRESULT hr = pXLWorksheet->Invoke
-    (
-        0xC5,
-        IID_NULL,
-        lcid,
-        DISPATCH_PROPERTYGET,
-        &DispParams,
-        &vResult,
-        NULL,
-        NULL
-    );
-    if(FAILED(hr))
-        return E_FAIL;
-    IDispatch* pXLRange = vResult.pdispVal;
-
-    // Member Get Value <6> () As Variant
-    DISPPARAMS      NoArgs         = {NULL,NULL,0,0};
-    VariantClear(&vArgArray[0]);
-    hr=pXLRange->Invoke
-        (
-        6,
-        IID_NULL,
-        lcid,
-        DISPATCH_PROPERTYGET,
-        &NoArgs,
-        &vResult,
-        NULL,
-        NULL
-        );
-    if(SUCCEEDED(hr))
-    {
-        if(vResult.vt==VT_BSTR)
-        {
-           if(SysStringLen(vResult.bstrVal)<iBufferLength)
-           {
-              wcscpy(pszCell,vResult.bstrVal);
-              VariantClear(&vResult);
-              return S_OK;
-           }
-           else
-           {
-              VariantClear(&vResult);
-              return E_FAIL;
-           }
-        }
-        else
-        {
-           pszCell[0]=0;
-           VariantClear(&vResult);
-        }
-    }
-    pXLRange->Release();
-
-    return E_FAIL;
-    }
-
-
-HRESULT GetCell(IDispatch* pXLSheet, wchar_t* pszRange, VARIANT& pVt)
-{
-    DISPPARAMS      NoArgs         = {NULL,NULL,0,0};
-    IDispatch*      pXLRange       = NULL;
-    VARIANT         vArgArray[1];
-    VARIANT         vResult;
-    DISPPARAMS      DispParams;
-    HRESULT         hr;
-    LCID            lcid;
-
-    VariantInit(&vResult);
-    vArgArray[0].vt                = VT_BSTR,
-    vArgArray[0].bstrVal           = SysAllocString(pszRange);
-    DispParams.rgvarg              = vArgArray;
-    DispParams.rgdispidNamedArgs   = 0;
-    DispParams.cArgs               = 1;
-    DispParams.cNamedArgs          = 0;
-    lcid                           = GetUserDefaultLCID();
-    hr=pXLSheet->Invoke(0xC5,IID_NULL,lcid,DISPATCH_PROPERTYGET,&DispParams,&vResult,NULL,NULL);
-    if(FAILED(hr))
-        return hr;
-    pXLRange=vResult.pdispVal;
-
-    //Member Get Value <6> () As Variant
-    VariantClear(&vArgArray[0]);
-    VariantClear(&pVt);
-    hr=pXLRange->Invoke(6,IID_NULL,lcid,DISPATCH_PROPERTYGET,&NoArgs,&pVt,NULL,NULL);
-    pXLRange->Release();
-
-    return hr;
-}
-
 
 IDispatch* GetDispatchObject(IDispatch* pObject, DISPID dispid, WORD wFlags, LCID lcid, const std::string& objectName)
 {
@@ -272,6 +108,54 @@ IDispatch* GetDispatchObject(IDispatch* pObject, DISPID dispid, WORD wFlags, LCI
     return vResult.pdispVal;
 }
 
+struct excelInstance
+{
+    LCID lcid;
+    IDispatch* pXLApp;
+    IDispatch* pXLWorkBooks;
+    excelInstance() : lcid(GetUserDefaultLCID()), pXLApp(NULL), pXLWorkBooks(NULL)
+    {
+        if (FAILED(CoInitialize(NULL)))
+            throw std::runtime_error("Failed to initialize COM Subsystem");
+        const CLSID  CLSID_XLApplication = {0x00024500,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
+        const IID    IID_Application     = {0x000208D5,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
+        HRESULT      hr                  = CoCreateInstance
+            ( CLSID_XLApplication
+            , NULL
+            , CLSCTX_LOCAL_SERVER
+            , IID_Application
+            , (void**)&this->pXLApp
+            );
+        if (SUCCEEDED(hr) && this->pXLApp)
+        {
+            logMembers(Foundation::GetLogger("OLE.Excel"), pXLApp, this->lcid);
+            SetHidden(pXLApp, this->lcid);
+            this->pXLWorkBooks = GetDispatchObject(this->pXLApp, 572, DISPATCH_PROPERTYGET, this->lcid, "Workbooks");
+        }
+    }
+    ~excelInstance()
+    {
+        if (this->pXLWorkBooks)
+        {
+            this->pXLWorkBooks->Release();
+            this->pXLWorkBooks = NULL;
+        }
+        if (pXLApp)
+        {
+            DISPPARAMS NoArgs = {NULL,NULL,0,0};
+            this->pXLApp->Invoke(0x12e, IID_NULL, this->lcid ,DISPATCH_METHOD ,&NoArgs ,NULL,NULL,NULL); // pXLApp->Quit()
+            this->pXLApp->Release();
+            this->pXLApp = NULL;
+        }
+        CoUninitialize();
+    }
+};
+
+excelInstance& GetInstance()
+{
+    static excelInstance instance;
+    return instance;
+}
 
 IDispatch* GetNamedDispatchObject(IDispatch* pObject, DISPID dispid, LCID lcid, const _bstr_t& name, const std::string& objectName)
 {
@@ -281,7 +165,7 @@ IDispatch* GetNamedDispatchObject(IDispatch* pObject, DISPID dispid, LCID lcid, 
 
     VariantInit(&vResult);
     vArgArray[0].vt                = VT_BSTR,
-    vArgArray[0].bstrVal           = name;
+    vArgArray[0].bstrVal           = SysAllocString(name);
     DispParams.rgvarg              = vArgArray;
     DispParams.rgdispidNamedArgs   = 0;
     DispParams.cArgs               = 1;
@@ -297,6 +181,7 @@ IDispatch* GetNamedDispatchObject(IDispatch* pObject, DISPID dispid, LCID lcid, 
         NULL,
         NULL
     );
+    SysFreeString(vArgArray[0].bstrVal);
     if(FAILED(hr))
         return NULL;
     logMembers(Foundation::GetLogger("OLE." + objectName), vResult.pdispVal, lcid);
@@ -346,6 +231,12 @@ auto GetDispatchString(IDispatch* pObject, DISPID dispid, LCID lcid) -> std::str
     return result;
 }
 
+auto GetDispatchVariant(IDispatch* pObject, DISPID dispid, LCID lcid, VARIANT* vResult) -> bool
+{
+    DISPPARAMS   NoArgs = {NULL,NULL,0,0};
+    return SUCCEEDED(pObject->Invoke(dispid, IID_NULL, lcid, DISPATCH_PROPERTYGET, &NoArgs, vResult, NULL, NULL));
+}
+
 } // anonymous namespace
 
 namespace Excel
@@ -353,15 +244,17 @@ namespace Excel
 
 struct Book::Impl
 {
-    LCID lcid;
-    IDispatch* pXLWorkBooks;
     IDispatch* pXLWorkBook;
     IDispatch* pXLWorkSheets;
     Impl()
-        : pXLWorkBooks(StartExcel(&lcid))
-        , pXLWorkBook(NULL)
+        : pXLWorkBook(NULL)
         , pXLWorkSheets(NULL)
     {
+    }
+    ~Impl()
+    {
+        if (pXLWorkBook) pXLWorkBook->Release();
+        if (pXLWorkSheets) pXLWorkSheets->Release();
     }
 };
 
@@ -375,7 +268,7 @@ Book::~Book()
 
 auto Book::CanLoad() const -> bool
 {
-    return !!m_impl->pXLWorkBooks;
+    return !!GetInstance().pXLWorkBooks;
 }
 
 auto Book::IsValid() const -> bool
@@ -403,46 +296,43 @@ auto Book::Load(const fs::path& path) -> bool
     dispParams.rgdispidNamedArgs   = &dispidNamed;
     dispParams.cArgs               = 1;
     dispParams.cNamedArgs          = 0;
-    HRESULT hr = m_impl->pXLWorkBooks->Invoke(682, IID_NULL, m_impl->lcid, DISPATCH_METHOD, &dispParams, &vResult, NULL,NULL);
+    HRESULT hr = GetInstance().pXLWorkBooks->Invoke(682, IID_NULL, GetInstance().lcid, DISPATCH_METHOD, &dispParams, &vResult, NULL,NULL);
     SysFreeString(vArgArray[0].bstrVal);
     if (!FAILED(hr))
     {
         m_impl->pXLWorkBook = vResult.pdispVal;
-        logMembers(Foundation::GetLogger("OLE.Workbook"), m_impl->pXLWorkBook, m_impl->lcid);
-        m_impl->pXLWorkSheets = GetDispatchObject(m_impl->pXLWorkBook, 494, DISPATCH_PROPERTYGET, m_impl->lcid, "Worksheets");
+        logMembers(Foundation::GetLogger("OLE.Workbook"), m_impl->pXLWorkBook, GetInstance().lcid);
+        m_impl->pXLWorkSheets = GetDispatchObject(m_impl->pXLWorkBook, 494, DISPATCH_PROPERTYGET, GetInstance().lcid, "Worksheets");
     }
     return m_impl->pXLWorkBook && m_impl->pXLWorkSheets;
 }
 
 auto Book::GetSheetCount() const -> int
 {
-    return GetDispatchCount(m_impl->pXLWorkSheets, m_impl->lcid);
+    return GetDispatchCount(m_impl->pXLWorkSheets, GetInstance().lcid);
 }
 
 struct Sheet::Impl
 {
     IDispatch* pXLWorkSheet;
-    Foundation::LoggerPtr log = Foundation::GetLogger("Worksheet");
+    std::string name;
     Impl(IDispatch* pObj = NULL)
         : pXLWorkSheet(pObj)
     {
     }
-    auto GetName(LCID lcid) const -> std::string
+    ~Impl()
     {
-        std::string result;
-        if (this->pXLWorkSheet)
-        {
-            result = GetDispatchString(this->pXLWorkSheet, 110, lcid);
-            LOG4CXX_DEBUG(this->log, result);
-        }
-        return result;
+        if (pXLWorkSheet) pXLWorkSheet->Release();
     }
 };
 
 auto Book::GetSheet(int item) const -> Sheet
 {
     Sheet result;
-    result.m_impl->pXLWorkSheet = GetDispatchItem(m_impl->pXLWorkSheets, item, m_impl->lcid, "Worksheet");
+    if (result.m_impl->pXLWorkSheet = GetDispatchItem(m_impl->pXLWorkSheets, item, GetInstance().lcid, "Worksheet"))
+    {
+        result.m_impl->name = GetDispatchString(result.m_impl->pXLWorkSheet, 110, GetInstance().lcid);
+    }
     return result;
 }
 
@@ -452,19 +342,12 @@ auto Book::GetSheet(const std::regex& selector, int afterItem) const -> SheetPos
     auto sheetCount = GetSheetCount();
     for (result.second = afterItem + 1; result.second <= sheetCount; ++result.second)
     {
-        if (result.first.m_impl->pXLWorkSheet)
-            result.first.m_impl->pXLWorkSheet->Release();
         result.first = GetSheet(result.second);
         if (result.first.m_impl->pXLWorkSheet)
         {
-            if (std::regex_match(result.first.m_impl->GetName(m_impl->lcid), selector))
+            if (std::regex_match(result.first.m_impl->name, selector))
                 break;
         }
-    }
-    if (sheetCount < result.second && result.first.m_impl->pXLWorkSheet)
-    {
-        result.first.m_impl->pXLWorkSheet->Release();
-        result.first.m_impl->pXLWorkSheet = NULL;
     }
     return result;
 }
@@ -482,49 +365,36 @@ auto Sheet::operator==(const Sheet& other) const -> bool
     return other.m_impl->pXLWorkSheet == m_impl->pXLWorkSheet;
 }
 
-struct Range::Impl
+auto Sheet::GetName() const -> std::string
+{
+    return m_impl->name;
+}
+
+struct Rows::Impl
 {
     Sheet clx;
-    _bstr_t range;
-    LCID lcid;
-    IDispatch* pXLRange;
-    Impl(const Sheet& parent, const std::string& cellRange)
+    IDispatch* pXLRows;
+    Impl(const Sheet& parent)
         : clx(parent)
-        , range(cellRange.c_str())
-        , pXLRange(NULL)
+        , pXLRows(NULL)
     {
-        StartExcel(&lcid);
+    }
+    ~Impl()
+    {
+        if (pXLRows) pXLRows->Release();
     }
 };
 
-Range::Range(const Sheet& parent, const std::string& cellRange) : m_impl(std::make_shared<Impl>(parent, cellRange))
+auto Sheet::GetRows() const -> Rows
 {
-}
-
-Range::~Range()
-{
-}
-
-auto Range::operator==(const Range& other) const -> bool
-{
-    return other.m_impl->pXLRange == m_impl->pXLRange;
-}
-
-auto Range::IsValid() const -> bool
-{
-    return !!m_impl->pXLRange;
-}
-
-auto Sheet::GetRange(const std::string& cellRange) const -> Range
-{
-    Range result(*this, cellRange);
-    result.m_impl->pXLRange = GetNamedDispatchObject(m_impl->pXLWorkSheet, 0xc5, result.m_impl->lcid, result.m_impl->range, "Range");
+    Rows result(*this);
+    result.m_impl->pXLRows = GetDispatchObject(m_impl->pXLWorkSheet, 258, DISPATCH_PROPERTYGET, GetInstance().lcid, "Rows");
     return result;
 }
 
-auto Sheet::GetRange(const std::string& cellRange, const std::regex& selector) const -> RangePosition
+auto Sheet::GetRows(const std::regex& selector) const -> RowsPosition
 {
-    return RangePosition(GetRange(cellRange), 0);
+    return RowsPosition(GetRows(), 0);
 }
 
 struct Sheet::Iterator::Impl
@@ -588,48 +458,139 @@ Sheet::Iterator::Forth()
     m_item = m_impl->current.first;
 }
 
-struct Range::Iterator::Impl
-{
-    RangePosition current;
-    Impl(const Sheet& sheet, const std::string& cellRange)
-        : current(sheet.GetRange(cellRange), 0)
-    {}
-};
-
-Range::Iterator::Iterator()
+Rows::Rows(const Sheet& parent) : m_impl(std::make_shared<Impl>(parent))
 {
 }
 
-Range::Iterator::~Iterator()
+Rows::~Rows()
+{
+}
+
+auto Rows::operator==(const Rows& other) const -> bool
+{
+    return other.m_impl->pXLRows == m_impl->pXLRows;
+}
+
+auto Rows::IsValid() const -> bool
+{
+    return !!m_impl->pXLRows;
+}
+
+struct Rows::Iterator::Impl
+{
+    RowsPosition current;
+    Cells cells;
+    Impl(const Sheet& sheet)
+        : current(sheet.GetRows(), 0)
+    {
+    }
+};
+
+Rows::Iterator::Iterator()
+{
+}
+
+Rows::Iterator::~Iterator()
 {
 }
 
 // Is this iterator beyond the end or before the start?
     bool
-Range::Iterator::Off() const
+Rows::Iterator::Off() const
 {
-    return !m_impl || !m_impl->current.first.IsValid();
+    return m_item.empty();
 }
 
-// Move to the first \c cellRange in \c sheet
+// Move to the first row in \c sheet
     void
-Range::Iterator::Start(const Sheet& sheet, const std::string& cellRange)
+Rows::Iterator::Start(const Sheet& sheet)
 {
-    m_impl = std::make_shared<Impl>(sheet, cellRange);
+    m_impl = std::make_shared<Impl>(sheet);
     Start();
 }
 
 // Move to the first row
     void
-Range::Iterator::Start()
+Rows::Iterator::Start()
 {
-    m_impl.reset();
+    m_impl->current.second = 1;
+    m_impl->cells = m_impl->current.first.GetCells(1);
+    m_item = m_impl->cells.GetData();
 }
+
 
 // Move to the next row. Precondition: !Off()
     void
-Range::Iterator::Forth()
+Rows::Iterator::Forth()
 {
+    ++m_impl->current.second;
+    m_impl->cells = m_impl->current.first.GetCells(m_impl->current.second);
+    m_item = m_impl->cells.GetData();
+}
+
+struct Cells::Impl
+{
+    IDispatch* pXLCells;
+    CellRow data;
+    Impl()
+        : pXLCells(NULL)
+    {
+    }
+    ~Impl()
+    {
+        if (pXLCells) pXLCells->Release();
+    }
+};
+
+auto Rows::GetCells(int row) const -> Cells
+{
+    Cells result;
+    result.m_impl->pXLCells = GetDispatchItem(m_impl->pXLRows, row, GetInstance().lcid, "Cells");
+    return result;
+}
+
+Cells::Cells() : m_impl(std::make_shared<Impl>())
+{
+}
+
+Cells::~Cells()
+{
+}
+
+auto Cells::operator==(const Cells& other) const -> bool
+{
+    return other.m_impl->pXLCells == m_impl->pXLCells;
+}
+
+auto Cells::IsValid() const -> bool
+{
+    return !!m_impl->pXLCells;
+}
+
+auto Cells::GetData() const -> CellRow
+{
+    if (m_impl->data.empty())
+    {
+        auto pItem = GetDispatchItem(m_impl->pXLCells, 1, GetInstance().lcid, "Cell");
+        VARIANT itemData;
+        if (pItem && GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData))
+        {
+            SafeArrayData sa(itemData.parray);
+            m_impl->data.resize(sa.DimensionSize(1));
+            sa.GetStringVector(m_impl->data.begin(), m_impl->data.end());
+        }
+        int emptyCount = 0;
+        for (const auto& item : m_impl->data)
+            if (item.empty())
+                ++emptyCount;
+            else
+                emptyCount = 0;
+        if (m_impl->data.size() == emptyCount)
+            m_impl->data.clear();
+        else if (0 < emptyCount)
+            m_impl->data.erase(m_impl->data.begin() + (m_impl->data.size() - emptyCount), m_impl->data.end());
+    }
+    return m_impl->data;
 }
 
 } // namespace Excel

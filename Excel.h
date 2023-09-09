@@ -32,8 +32,8 @@ public: // Methods
     bool Load(const fs::path& excelFilePath);
 };
 
-class Range;
-using RangePosition = std::pair<Range, int>;
+class Rows;
+using RowsPosition = std::pair<Rows, int>;
 
 class Sheet
 {
@@ -44,8 +44,9 @@ public: // ...structors
     ~Sheet();
 public: // Accessors
     bool operator==(const Sheet& other) const;
-    auto GetRange(const std::string& cellRange) const -> Range;
-    auto GetRange(const std::string& cellRange, const std::regex& selector) const -> RangePosition;
+    auto GetName() const -> std::string;
+    auto GetRows() const -> Rows;
+    auto GetRows(const std::regex& selector) const -> RowsPosition;
 public: // Methods
 public: // Inner classes
     class Iterator;
@@ -71,16 +72,19 @@ public: // Methods
     void Forth() override;
 };
 
-class Range
+class Cells;
+
+class Rows
 {
 private: // Attributes
     DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
 public: // ...structors
-    Range(const Sheet& parent, const std::string& cellRange);
-    ~Range();
+    Rows(const Sheet& parent);
+    ~Rows();
 public: // Accessors
-    bool operator==(const Range& other) const;
+    bool operator==(const Rows& other) const;
     bool IsValid() const;
+    auto GetCells(int row) const -> Cells;
 public: // Methods
 public: // Inner classes
     class Iterator;
@@ -88,7 +92,7 @@ public: // Inner classes
 };
 
 using CellRow = std::vector<std::string>;
-class Range::Iterator : public Foundation::Iterator<CellRow>
+class Rows::Iterator : public Foundation::Iterator<CellRow>
 {
 private: // Attributes
     DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
@@ -99,12 +103,30 @@ public: // Accessors
     /// Is this iterator beyond the end or before the start?
     bool Off() const override;
 public: // Methods
-    /// Move to the first \c cellRange in \c sheet
-    void Start(const Sheet& sheet, const std::string& cellPattern = std::string());
+    /// Move to the first row in \c sheet
+    void Start(const Sheet& sheet);
     /// Move to the first row
     void Start() override;
     /// Move to the next row. Precondition: !Off()
     void Forth() override;
+public: // Inner classes
+    friend class Rows;
+};
+
+class Cells
+{
+private: // Attributes
+    DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
+public: // ...structors
+    Cells();
+    ~Cells();
+public: // Accessors
+    bool operator==(const Cells& other) const;
+    bool IsValid() const;
+    auto GetData() const -> CellRow;
+public: // Methods
+public: // Inner classes
+    friend class Rows;
 };
 
 } // namespace Excel

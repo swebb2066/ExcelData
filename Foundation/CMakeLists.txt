@@ -10,6 +10,7 @@ set(SRC_FILES
   ReversePolishStack.cpp
   Yaml.cpp
   YamlDocument.cpp
+  SafeArrayWrapper.cpp
 )
 
 set(PUBLIC_COMPILE_DEFINITIONS)
