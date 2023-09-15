@@ -258,9 +258,7 @@ struct Book::Impl
         {
             // Call WorkBook::Close(SaveChanges=False)
             VARIANT      vArgArray[1];
-            VARIANT      vResult;
             VariantInit(&vArgArray[0]);
-            VariantInit(&vResult);
             vArgArray[0].vt      = VT_BOOL;
             vArgArray[0].boolVal = FALSE;
             DISPID     dispidNamed;
@@ -269,7 +267,7 @@ struct Book::Impl
             dispParams.rgdispidNamedArgs   = &dispidNamed;
             dispParams.cArgs               = 1;
             dispParams.cNamedArgs          = 0;
-            pXLWorkBook->Invoke(277, IID_NULL, GetInstance().lcid ,DISPATCH_METHOD ,&dispParams ,NULL,NULL,NULL);
+            pXLWorkBook->Invoke(277, IID_NULL, GetInstance().lcid, DISPATCH_METHOD, &dispParams ,NULL,NULL,NULL);
             pXLWorkBook->Release();
         }
     }
@@ -288,31 +286,37 @@ auto Book::CanLoad() const -> bool
     return !!GetInstance().pXLWorkBooks;
 }
 
-// Call WorkBooks::_Open()  >> Gets pXLWorkSheets
 auto Book::Load(const fs::path& path) -> bool
 {
-    m_impl = std::make_shared<Impl>();
-    VARIANT         vResult;
-    VARIANT         vArgArray[1];
-
-    VariantInit(&vResult);
-    vArgArray[0].vt                = VT_BSTR;
-    vArgArray[0].bstrVal           = SysAllocString(path.wstring().c_str());
+    // Call WorkBooks::Open(FileName, UpdateLinks=False, ReadOnly=True)
+    VARIANT      vArgArray[3];
+    vArgArray[2].vt                = VT_BSTR;
+    vArgArray[2].bstrVal           = SysAllocString(path.wstring().c_str());
+    vArgArray[1].vt                = VT_BOOL; // UpdateLinks
+    vArgArray[1].boolVal           = FALSE;
+    vArgArray[0].vt                = VT_BOOL; // ReadOnly
+    vArgArray[0].boolVal           = TRUE;
     DISPID     dispidNamed;
     DISPPARAMS dispParams;
     dispParams.rgvarg              = vArgArray;
     dispParams.rgdispidNamedArgs   = &dispidNamed;
-    dispParams.cArgs               = 1;
+    dispParams.cArgs               = 3;
     dispParams.cNamedArgs          = 0;
-    HRESULT hr = GetInstance().pXLWorkBooks->Invoke(682, IID_NULL, GetInstance().lcid, DISPATCH_METHOD, &dispParams, &vResult, NULL,NULL);
-    SysFreeString(vArgArray[0].bstrVal);
-    if (!FAILED(hr))
+    VARIANT      vResult;
+    VariantInit(&vResult);
+    HRESULT hr = GetInstance().pXLWorkBooks->Invoke(1923, IID_NULL, GetInstance().lcid, DISPATCH_METHOD, &dispParams, &vResult, NULL,NULL);
+    SysFreeString(vArgArray[2].bstrVal);
+    bool result = false;
+    if (!FAILED(hr) && vResult.pdispVal)
     {
+        // Get pXLWorkSheets
+        m_impl = std::make_shared<Impl>();
         m_impl->pXLWorkBook = vResult.pdispVal;
         logMembers(Foundation::GetLogger("OLE.Workbook"), m_impl->pXLWorkBook, GetInstance().lcid);
         m_impl->pXLWorkSheets = GetDispatchObject(m_impl->pXLWorkBook, 494, DISPATCH_PROPERTYGET, GetInstance().lcid, "Worksheets");
+        result = !!m_impl->pXLWorkSheets;
     }
-    return m_impl->pXLWorkBook && m_impl->pXLWorkSheets;
+    return result;
 }
 
 auto Book::IsValid() const -> bool
@@ -375,12 +379,12 @@ Sheet::~Sheet()
 
 auto Sheet::operator==(const Sheet& other) const -> bool
 {
-    return other.m_impl->pXLWorkSheet == m_impl->pXLWorkSheet;
+    return m_impl && other.m_impl && other.m_impl->pXLWorkSheet == m_impl->pXLWorkSheet;
 }
 
 bool Sheet::IsValid() const
 {
-    return !!m_impl->pXLWorkSheet;
+    return m_impl && m_impl->pXLWorkSheet;
 }
 
 auto Sheet::GetName() const -> std::string
@@ -562,7 +566,6 @@ struct Cells::Impl
 auto Rows::GetCells(int row) const -> Cells
 {
     Cells result;
-    if (result.m_impl->pXLCells) result.m_impl->pXLCells->Release();
     result.m_impl->pXLCells = GetDispatchItem(m_impl->pXLRows, row, GetInstance().lcid, "Cells");
     return result;
 }

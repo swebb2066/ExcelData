@@ -71,35 +71,36 @@ void CellRowIterator::Forth()
 /// Load the first sheet in the current file. Precondition: m_impl->currentBook.CanLoad()
 bool CellRowIterator::StartBook()
 {
-    LOG4CXX_DEBUG(m_impl->log, "StartBook: " << m_impl->fileIter->Item());
-    bool result = false;
-    while (!m_impl->fileIter->Off() && m_impl->currentBook.Load(m_impl->fileIter->Item()))
+    while (!m_impl->fileIter->Off())
     {
-        m_impl->sheetIter.Start(m_impl->currentBook, m_impl->sheetPattern);
-        if (result = StartSheet())
-            break;
+        LOG4CXX_DEBUG(m_impl->log, "StartBook: " << m_impl->fileIter->Item());
+        if (m_impl->currentBook.Load(m_impl->fileIter->Item()))
+        {
+            m_impl->sheetIter.Start(m_impl->currentBook, m_impl->sheetPattern);
+            if (StartSheet())
+                return true;
+        }
+        else
+        {
+            LOG4CXX_WARN(m_impl->log, "Failed to load " << m_impl->fileIter->Item());
+        }
         m_impl->fileIter->Forth();
     }
-    return result;
+    return false;
 }
 
 /// Set m_impl->rowIter to a sheet row
 bool CellRowIterator::StartSheet()
 {
-    bool result = false;
     while (!m_impl->sheetIter.Off())
     {
+        LOG4CXX_DEBUG(m_impl->log, "StartSheet: " << m_impl->sheetIter.Item().GetName());
         m_impl->rowIter.Start(m_impl->sheetIter.Item());
-        if (!m_impl->rowIter.Off())
-        {
-            LOG4CXX_DEBUG(m_impl->log, "StartSheet: " << m_impl->sheetIter.Item().GetName());
-            result = SetItem();
-        }
-        if (result)
-            break;
+        if (!m_impl->rowIter.Off() && SetItem())
+            return true;
         m_impl->sheetIter.Forth();
     }
-    return result;
+    return false;
 }
 
 /// Set m_item. Precondition: !m_impl->rowIter.Off()
