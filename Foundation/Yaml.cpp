@@ -24,7 +24,7 @@ namespace YAML
 {
 
      std::string
-FileLocation(const Mark& mark, const boost::filesystem::path& fileName)
+FileLocation(const Mark& mark, const fs::path& fileName)
 {
     if (mark.is_null())
         return fileName.string();

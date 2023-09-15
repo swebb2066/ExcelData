@@ -4,8 +4,6 @@
 #include <string>
 #include <sstream>
 #include <windows.h>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/path.hpp>
 
 namespace Foundation
 {

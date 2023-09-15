@@ -9,12 +9,12 @@
 #pragma comment(lib, "psapi.lib")
 #endif
 #include <stdlib.h>
-#include <boost/filesystem.hpp>
-#include <boost/version.hpp>
-#include <log4cxx/logmanager.h>
+#include <filesystem>
 
 namespace Foundation
 {
+
+namespace fs = std::filesystem;
 
 //////////////////////////////////////////
 // EnvironmentSection implementation
@@ -149,7 +149,7 @@ Environment::PathPrefix()
     Environment::StringType
 Environment::GetAppDataPath(const StringType& fileName)
 {
-    using PathType = boost::filesystem::path;
+    using PathType = fs::path;
 #ifdef WIN32
     PathType result(GetProcessVariables().GetString("LocalAppData", ""));
 #else
@@ -170,7 +170,7 @@ Environment::GetAppDataPath(const StringType& fileName)
     Environment::StringType
 Environment::GetConfigDataPath(const StringType& subDir)
 {
-    using PathType = boost::filesystem::path;
+    using PathType = fs::path;
 #ifdef WIN32
     PathType result(GetProcessVariables().GetString("ProgramData", ""));
 #else
@@ -191,7 +191,7 @@ Environment::GetConfigDataPath(const StringType& subDir)
     Environment::StringType
 Environment::GetConfigFile(const StringType& ext)
 {
-    using PathType = boost::filesystem::path;
+    using PathType = fs::path;
     PathType exeFile(PathPrefix());
     return GetLocalFile(exeFile.stem().string(), ext);
 }
@@ -200,7 +200,7 @@ Environment::GetConfigFile(const StringType& ext)
     Environment::StringType
 Environment::GetLocalFile(const StringType& stem, const StringType& ext)
 {
-    using PathType = boost::filesystem::path;
+    using PathType = fs::path;
 #ifdef WIN32
     PathType result(GetProcessVariables().GetString("ProgramData", ""));
 #else
@@ -213,11 +213,7 @@ Environment::GetLocalFile(const StringType& stem, const StringType& ext)
         result /= m_partitionName;
     result /= stem;
     if (!ext.empty())
-#if BOOST_VERSION < 105000
-        result.replace_extension(ext);
-#else
         result += ext;
-#endif
     if (exists(result)) // Does a user modified version exist?
         ;
     else if (exists(result.filename())) // Does a current directory version exist?
@@ -228,11 +224,7 @@ Environment::GetLocalFile(const StringType& stem, const StringType& ext)
         // Default to the location of executable
         result = PathType(PathPrefix()).parent_path() / stem;
         if (!ext.empty())
-#if BOOST_VERSION < 105000
-            result.replace_extension(ext);
-#else
             result += ext;
-#endif
     }
     LOG4CXX_TRACE(m_log, "GetConfigFile: " << result);
     return result.string();
@@ -246,7 +238,7 @@ Environment::GetPrimeSource(const StringType& ext) const
     StringType primeVar = GetProcessVariables().GetString("ENVIRONMENT_PRIME_SOURCE", "");
     if (!primeVar.empty())
     {
-        boost::filesystem::path name(primeVar);
+        fs::path name(primeVar);
         LOG4CXX_TRACE(m_log, "ENVIRONMENT_PRIME_SOURCE " << primeVar << " is_absolute? " << name.is_absolute() << " has_extension? " << name.has_extension());
         if (!name.is_absolute() && !name.has_extension())
             result = GetLocalFile(primeVar, ext);
@@ -270,7 +262,7 @@ Environment::GetAlternateSource(const StringType& ext) const
     StringType primeVar = GetProcessVariables().GetString("ENVIRONMENT_PRIME_SOURCE", "");
     if (!altVar.empty())
     {
-        boost::filesystem::path name(altVar);
+        fs::path name(altVar);
         LOG4CXX_TRACE(m_log, "ENVIRONMENT_ALT_SOURCE " << altVar << " is_absolute? " << name.is_absolute() << " has_extension? " << name.has_extension());
         if (!name.is_absolute() && !name.has_extension())
             result = GetLocalFile(altVar, ext);
@@ -482,14 +474,14 @@ Environment::GetExpandedString(const StringType& inString)
     void
 Environment::MakeLocalFileWritable(const StringType& stem, const StringType& ext)
 {
-    boost::filesystem::path envFile(GetLocalFile(stem, ext));
-    boost::filesystem::path configPath(GetConfigDataPath());
+    fs::path envFile(GetLocalFile(stem, ext));
+    fs::path configPath(GetConfigDataPath());
     LOG4CXX_DEBUG(m_log, "MakeLocalFileWritable: envFile " << envFile << " configPath " << configPath);
     if (!equivalent(envFile.parent_path(), configPath))
     {
-        boost::filesystem::path writableFile = configPath / envFile.filename();
-        boost::system::error_code ec;
-        boost::filesystem::copy_file(envFile, writableFile, ec);
+        fs::path writableFile = configPath / envFile.filename();
+        std::error_code ec;
+        fs::copy_file(envFile, writableFile, ec);
         LOG4CXX_DEBUG(m_log, "MakeLocalFileWritable: writableFile " << writableFile);
     }
 }

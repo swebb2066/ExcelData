@@ -44,6 +44,7 @@ public: // ...structors
     ~Sheet();
 public: // Accessors
     bool operator==(const Sheet& other) const;
+    bool IsValid() const;
     auto GetName() const -> std::string;
     auto GetRows() const -> Rows;
     auto GetRows(const std::regex& selector) const -> RowsPosition;

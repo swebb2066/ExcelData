@@ -1,9 +1,9 @@
 #include <Foundation/Logger.h>
 #include <log4cxx/logmanager.h>
+#include <log4cxx/basicconfigurator.h>
 #include <log4cxx/propertyconfigurator.h>
 #include <log4cxx/xml/domconfigurator.h>
 #include <Foundation/Environment.h>
-#include <boost/filesystem.hpp>
 
 namespace Foundation
 {
@@ -37,7 +37,7 @@ bool GetPropertiesFile(log4cxx::File& propertyFile)
 }
 
 // Initialise log4cxx by reading the properties file
-void InitialiseLogger(boost::filesystem::path* configFileUsed)
+void InitialiseLogger(fs::path* configFileUsed)
 {
     static struct log4cxx_initializer
     {
@@ -48,6 +48,8 @@ void InitialiseLogger(boost::filesystem::path* configFileUsed)
 				log4cxx::xml::DOMConfigurator::configure(f.getPath());
             else if (GetPropertiesFile(f))
                 log4cxx::PropertyConfigurator::configure(f);
+            else
+                log4cxx::BasicConfigurator::configure();
         }
         ~log4cxx_initializer()
         {
@@ -55,7 +57,7 @@ void InitialiseLogger(boost::filesystem::path* configFileUsed)
         }
     } initialiser;
     if (configFileUsed)
-        *configFileUsed = absolute(boost::filesystem::path(initialiser.f.getPath()));
+        *configFileUsed = absolute(fs::path(initialiser.f.getPath()));
 }
 
 // Retrieve the \c name logger pointer.

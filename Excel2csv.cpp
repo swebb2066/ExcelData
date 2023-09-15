@@ -1,16 +1,15 @@
 #include <Foundation/Environment.h>
 #include <Foundation/YamlDocument.h>
-#include <Foundation/FileIterator.h>
-#include <Foundation/ReversePolishStack.h>
-#include <Foundation/StdLogger.h>
 #include <Foundation/LogMessages.h>
+#include <Foundation/StdLogger.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
-#include "Excel.h"
+#include <filesystem>
+#include "CellRowIterator.h"
 
 static const char* usageMsg =
-"Generate a comma separated values (CSV) file from .xls or .xlsx files\n"
+"Search .xls or .xlsx files\n"
 "Allowed options"
 ;
 
@@ -130,134 +129,6 @@ static const char* mapFileParam =
 "  - Name: Total Duration (hrs)\n"
 "    Value: !duration [3600, TotalDuration, /]\n"
 ;
-
-namespace fs = std::filesystem;
-namespace po = boost::program_options;
-
-/// Provides a sequence of value vectors from Excel files
-class CellRowIterator : public Foundation::Iterator<Excel::CellRow>
-{
-    using FileIteratorPtr = std::unique_ptr<Foundation::FileIterator>;
-protected: // Attributes
-    FileIteratorPtr m_fileIter;
-    Excel::Book m_currentBook;
-    Excel::Sheet::Iterator m_sheetIter;
-    std::string m_sheetPattern;
-    Excel::Rows::Iterator m_rowIter;
-    std::string m_cellPattern;
-
-public: // ...structors
-    CellRowIterator(const fs::path& dir, const YAML::Node& cellRangeSelector)
-        : m_sheetPattern(GetPattern(cellRangeSelector["Sheet"]))
-        , m_cellPattern(GetPattern(cellRangeSelector["Cells"]))
-    {
-        auto fileSelector = cellRangeSelector["Path"];
-        std::string namePattern;
-        if (fileSelector.IsScalar())
-            namePattern = fileSelector.Scalar();
-        else if (!fileSelector.IsSequence())
-            namePattern = "*(.xls|.xlsx)"; // All Excel files in dir
-        else for (auto node : fileSelector)
-            namePattern += node.Scalar();
-        auto rootDir = dir.empty() ? fs::current_path() : dir;
-        LOG4CXX_DEBUG(m_log, "namePattern " << namePattern << " in " << rootDir);
-        auto selector = std::make_shared<Foundation::PathSelector>(namePattern, rootDir);
-        m_fileIter = std::make_unique<Foundation::FileIterator>(rootDir, selector);
-    }
-
-public: // Accessors
-    /// Is this iterator beyond the end or before the start?
-    bool Off() const { return m_item.empty(); }
-
-public: // Methods
-    /// Move to the first item
-    void Start()
-    {
-        m_item.clear();
-        m_fileIter->Start();
-        StartBook();
-    }
-
-    /// Move to the next item. Precondition: !Off()
-    void Forth()
-    {
-        m_item.clear();
-        m_rowIter.Forth();
-        if (!m_rowIter.Off())
-            SetItem();
-        else
-        {
-            m_sheetIter.Forth();
-            if (!StartSheet())
-            {
-                m_fileIter->Forth();
-                StartBook();
-            }
-        }
-    }
-
-protected: // Support methods
-    /// Load the first sheet in the current file. Precondition: m_currentBook.CanLoad()
-    bool StartBook()
-    {
-        LOG4CXX_DEBUG(m_log, "StartBook: " << m_fileIter->Item());
-        bool result = false;
-        while (!m_fileIter->Off() && m_currentBook.Load(m_fileIter->Item()))
-        {
-            m_sheetIter.Start(m_currentBook, m_sheetPattern);
-            if (result = StartSheet())
-                break;
-            m_fileIter->Forth();
-        }
-        return result;
-    }
-
-    /// Set m_rowIter to a sheet row
-    bool StartSheet()
-    {
-        bool result = false;
-        while (!m_sheetIter.Off())
-        {
-            m_rowIter.Start(m_sheetIter.Item());
-            if (!m_rowIter.Off())
-            {
-                LOG4CXX_DEBUG(m_log, "StartSheet: " << m_sheetIter.Item().GetName());
-                result = SetItem();
-            }
-            if (result)
-                break;
-            m_sheetIter.Forth();
-        }
-        return result;
-    }
-
-    /// Set m_item. Precondition: !m_rowIter.Off()
-    bool SetItem()
-    {
-        m_item = m_rowIter.Item();
-        LOG4CXX_DEBUG(m_log, "At: " << m_rowIter.Item());
-        return !m_item.empty();
-    }
-    
-    static std::string GetPattern(const YAML::Node& selector)
-    {
-        std::string pattern;
-        if (selector.IsScalar())
-            pattern = selector.Scalar();
-        else if (!selector.IsSequence())
-            ; // All items
-        else for (auto node : selector)
-            pattern += node.Scalar();
-        LOG4CXX_DEBUG(m_log, "GetPattern: " << pattern);
-        return pattern;
-    }
-
-protected: // class data
-    static log4cxx::LoggerPtr m_log;
-};
-
-    log4cxx::LoggerPtr
-CellRowIterator::m_log(log4cxx::Logger::getLogger("CellRowIterator"));
 
 /// Provides a YAML map for each unique combination
 class MappingIterator : public Foundation::Iterator<YAML::Node>
@@ -388,10 +259,10 @@ OutputValue(std::ostream& os, const std::string& tagName, const YAML::Node& node
     void
 ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::DocumentTemplate& mapping)
 {
-    static log4cxx::LoggerPtr log_s(log4cxx::Logger::getLogger("ProcessDocuments"));
+    static auto log_s(log4cxx::Logger::getLogger("ProcessDocuments"));
     auto mappingData = mapping.GetOriginalData();
     auto mappingDoc = mapping.GetOriginalDocument();
-    CellRowIterator input(inputPath, mappingData["Input"]);
+    Excel::CellRowIterator input(inputPath, mappingData["Input"]);
     auto output = mappingData["Output"];
     std::vector<std::string> lastKey;
     for (input.Start(); !input.Off(); input.Forth())
@@ -425,10 +296,14 @@ ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::Docume
     }
 }
 
+namespace po = boost::program_options;
+
 /// A command line interface for extracting comma separated values from Excel files
 int main(int argc, char* argv[])
 {
     // Declare the supported options.
+
+namespace po = boost::program_options;
     po::options_description desc(usageMsg, 160);
     desc.add_options()
         ("help,h", "display optional parameter descriptions")

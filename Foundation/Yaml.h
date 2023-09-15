@@ -3,11 +3,12 @@
 #define FOUNDATION_YAML_HEADER__
 
 #include <yaml-cpp/yaml.h>
-#include <boost/filesystem/path.hpp>
+#include <filesystem>
 
 /// Extensions to yaml-cpp
 namespace YAML
 {
+namespace fs = std::filesystem;
 
 /// The value of element \c elementName in the map \c node
    inline Node
@@ -29,7 +30,7 @@ operator<<(std::ostream& os, const Mark& loc)
 
 /// A string that describes a file location
      std::string
-FileLocation(const Mark& mark, const boost::filesystem::path& fileName);
+FileLocation(const Mark& mark, const fs::path& fileName);
 
 /// An exception that reports ambiguity
 class AmbiguousItem : public Exception
@@ -52,10 +53,10 @@ public: // ...stuctors
 class MissingFileException : public Exception
 {
 public: // ...stuctors
-    MissingFileException(const Mark& mark, const boost::filesystem::path& fileName)
+    MissingFileException(const Mark& mark, const fs::path& fileName)
         : Exception(mark, fileName.string() + ": not found")
     {   }
-    MissingFileException(const Mark& mark, const boost::filesystem::path& fileName, const std::string& context)
+    MissingFileException(const Mark& mark, const fs::path& fileName, const std::string& context)
         : Exception(mark, fileName.string() + ": not found - see " + context)
     {   }
 };

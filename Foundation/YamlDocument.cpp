@@ -7,7 +7,6 @@
 #include <yaml-cpp/NodeBuilder.h>
 #endif // YAML_EVENT_HANDLER_PROVIDES_NODE_EXTENT
 #include <fstream>
-#include <boost/make_shared.hpp>
 
 namespace YAML
 {
@@ -74,11 +73,10 @@ public: // Hooked methods
 };
 #endif
 
-// A copy without the shallowest level index
+// A copy without the shallowest level index. Precondition: HasInternalIndex()
     Document::UpdateMark
 Document::UpdateMark::InternalUpdateMark() const
 {
-    assert(HasInternalIndex());
     UpdateMark result(*this);
     result.updatePath.pop_back();
     return result;
@@ -920,11 +918,10 @@ Document::AnchorStart(const Mark& mark) const
     return result;
 }
 
-// The location of the first character after any anchor (if any) starting at \c mark
+// The location of the first character after any anchor (if any) starting at \c mark. Precondition: 0 <= mark.pos
     Mark
 Document::AnchorEnd(const Mark& mark) const
 {
-    assert(0 <= mark.pos);
     Mark endAnchor = mark;
     char startCh = 0;
     while ((size_t)endAnchor.pos < m_content->size() &&
@@ -953,11 +950,10 @@ Document::AnchorEnd(const Mark& mark) const
     return endAnchor;
 }
 
-// The location of the first character after null starting at \c mark
+// The location of the first character after null starting at \c mark. Precondition: 0 <= mark.pos
     Mark
 Document::NullEnd(const Mark& mark) const
 {
-    assert(0 <= mark.pos);
     Mark endNull = mark;
     while ((size_t)endNull.pos < m_content->size() && m_content->at(endNull.pos) == ' ')
         ++endNull.pos, ++endNull.column;
@@ -1362,7 +1358,7 @@ DocumentTemplate::GetAdaptedText(const Node& paramOverrides, const StringType& s
         }
         std::stringstream ss;
         tempDoc.Store(ss);
-        result = boost::make_shared<StringType>(ss.str());
+        result = std::make_shared<StringType>(ss.str());
         tempDoc.ResetUpdates();
     }
     else

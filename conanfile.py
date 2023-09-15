@@ -13,7 +13,6 @@ class Excel2csvConan(ConanFile):
         "log4cxx/1.1.0@",
         "boost/1.83.0@",
         "yaml-cpp/0.8.0@",
-        #"libxls/1.6.2@",
         )
     generators = ("CMakeDeps", "CMakeToolchain")
 

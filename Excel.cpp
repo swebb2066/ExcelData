@@ -67,7 +67,7 @@ void logMembers(const Foundation::LoggerPtr& log, IDispatch* pObj, LCID lcid)
                         << " " << (const char*)_bstr_t(wName)
                         << "=" << std::dec << pDesc->memid
                         << "=0x" << std::hex << pDesc->memid
-                        << " paramCount " << pDesc->cParams
+                        << " paramCount " << std::dec << pDesc->cParams
                     );
                     SysFreeString(wName);
                 }
@@ -217,7 +217,7 @@ IDispatch* GetDispatchItem(IDispatch* pObject, int item, LCID lcid, const std::s
     DispParams.cNamedArgs          = 0;
     if (FAILED(pObject->Invoke(0xAA,IID_NULL,lcid,DISPATCH_PROPERTYGET,&DispParams,&vResult,NULL,NULL)))
         return NULL;
-    logMembers(Foundation::GetLogger("OLE." + objectName), vResult.pdispVal, lcid);
+    logMembers(Foundation::GetLogger("OLE." + objectName + ".Item"), vResult.pdispVal, lcid);
     return vResult.pdispVal;
 }
 
@@ -253,12 +253,29 @@ struct Book::Impl
     }
     ~Impl()
     {
-        if (pXLWorkBook) pXLWorkBook->Release();
         if (pXLWorkSheets) pXLWorkSheets->Release();
+        if (pXLWorkBook)
+        {
+            // Call WorkBook::Close(SaveChanges=False)
+            VARIANT      vArgArray[1];
+            VARIANT      vResult;
+            VariantInit(&vArgArray[0]);
+            VariantInit(&vResult);
+            vArgArray[0].vt      = VT_BOOL;
+            vArgArray[0].boolVal = FALSE;
+            DISPID     dispidNamed;
+            DISPPARAMS dispParams;
+            dispParams.rgvarg              = vArgArray;
+            dispParams.rgdispidNamedArgs   = &dispidNamed;
+            dispParams.cArgs               = 1;
+            dispParams.cNamedArgs          = 0;
+            pXLWorkBook->Invoke(277, IID_NULL, GetInstance().lcid ,DISPATCH_METHOD ,&dispParams ,NULL,NULL,NULL);
+            pXLWorkBook->Release();
+        }
     }
 };
 
-Book::Book() : m_impl(std::make_shared<Impl>())
+Book::Book()
 {
 }
 
@@ -271,19 +288,10 @@ auto Book::CanLoad() const -> bool
     return !!GetInstance().pXLWorkBooks;
 }
 
-auto Book::IsValid() const -> bool
-{
-    return !!m_impl->pXLWorkBook;
-}
-
-// Call WorkBooks::Open() - 682  >> Gets pXLWorkBook
+// Call WorkBooks::_Open()  >> Gets pXLWorkSheets
 auto Book::Load(const fs::path& path) -> bool
 {
-    if (m_impl->pXLWorkBook)
-    {
-        m_impl->pXLWorkBook->Release();
-        m_impl->pXLWorkBook = NULL;
-    }
+    m_impl = std::make_shared<Impl>();
     VARIANT         vResult;
     VARIANT         vArgArray[1];
 
@@ -307,9 +315,14 @@ auto Book::Load(const fs::path& path) -> bool
     return m_impl->pXLWorkBook && m_impl->pXLWorkSheets;
 }
 
+auto Book::IsValid() const -> bool
+{
+    return m_impl && m_impl->pXLWorkSheets;
+}
+
 auto Book::GetSheetCount() const -> int
 {
-    return GetDispatchCount(m_impl->pXLWorkSheets, GetInstance().lcid);
+    return IsValid() ? GetDispatchCount(m_impl->pXLWorkSheets, GetInstance().lcid) : 0;
 }
 
 struct Sheet::Impl
@@ -343,9 +356,9 @@ auto Book::GetSheet(const std::regex& selector, int afterItem) const -> SheetPos
     for (result.second = afterItem + 1; result.second <= sheetCount; ++result.second)
     {
         result.first = GetSheet(result.second);
-        if (result.first.m_impl->pXLWorkSheet)
+        if (result.first.IsValid())
         {
-            if (std::regex_match(result.first.m_impl->name, selector))
+            if (std::regex_match(result.first.GetName(), selector))
                 break;
         }
     }
@@ -363,6 +376,11 @@ Sheet::~Sheet()
 auto Sheet::operator==(const Sheet& other) const -> bool
 {
     return other.m_impl->pXLWorkSheet == m_impl->pXLWorkSheet;
+}
+
+bool Sheet::IsValid() const
+{
+    return !!m_impl->pXLWorkSheet;
 }
 
 auto Sheet::GetName() const -> std::string
@@ -402,7 +420,6 @@ struct Sheet::Iterator::Impl
     Book clx;
     std::optional<std::regex> selector;
     SheetPosition current;
-    Foundation::LoggerPtr log = Foundation::GetLogger("SheetIterator");
 };
 
 Sheet::Iterator::Iterator() : m_impl(std::make_shared<Impl>())
@@ -545,6 +562,7 @@ struct Cells::Impl
 auto Rows::GetCells(int row) const -> Cells
 {
     Cells result;
+    if (result.m_impl->pXLCells) result.m_impl->pXLCells->Release();
     result.m_impl->pXLCells = GetDispatchItem(m_impl->pXLRows, row, GetInstance().lcid, "Cells");
     return result;
 }
@@ -571,24 +589,22 @@ auto Cells::GetData() const -> CellRow
 {
     if (m_impl->data.empty())
     {
-        auto pItem = GetDispatchItem(m_impl->pXLCells, 1, GetInstance().lcid, "Cell");
-        VARIANT itemData;
+        auto pItem = GetDispatchItem(m_impl->pXLCells, 1, GetInstance().lcid, "Cells");
+        _variant_t itemData;
         if (pItem && GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData))
         {
             SafeArrayData sa(itemData.parray);
             m_impl->data.resize(sa.DimensionSize(1));
             sa.GetStringVector(m_impl->data.begin(), m_impl->data.end());
         }
-        int emptyCount = 0;
-        for (const auto& item : m_impl->data)
-            if (item.empty())
-                ++emptyCount;
-            else
-                emptyCount = 0;
-        if (m_impl->data.size() == emptyCount)
-            m_impl->data.clear();
-        else if (0 < emptyCount)
-            m_impl->data.erase(m_impl->data.begin() + (m_impl->data.size() - emptyCount), m_impl->data.end());
+        while (!m_impl->data.empty())
+        {
+            if (!m_impl->data.back().empty())
+                break;
+            m_impl->data.pop_back();
+        }
+        if (pItem)
+            pItem->Release();
     }
     return m_impl->data;
 }

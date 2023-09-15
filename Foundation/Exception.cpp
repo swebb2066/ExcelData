@@ -24,19 +24,19 @@ MissingValueException::MissingValueException(const std::string& item, const std:
     : Exception(item + ": not found - see " + context)
 {   }
 
-MissingFileException::MissingFileException(const boost::filesystem::path& fileName)
+MissingFileException::MissingFileException(const fs::path& fileName)
     : Exception(fileName.string() + ": not found")
 {   }
 
-MissingFileException::MissingFileException(const boost::filesystem::path& fileName, const std::string& context)
+MissingFileException::MissingFileException(const fs::path& fileName, const std::string& context)
     : Exception(fileName.string() + ": not found - see " + context)
 {   }
 
-BadFileException::BadFileException(const std::string& msg, const boost::filesystem::path& fileName)
+BadFileException::BadFileException(const std::string& msg, const fs::path& fileName)
     : Exception(msg + " in " + fileName.string())
 {   }
 
-BadFileException::BadFileException(const std::string& msg, const boost::filesystem::path& fileName, const std::string& context)
+BadFileException::BadFileException(const std::string& msg, const fs::path& fileName, const std::string& context)
     : Exception(msg + " in " + fileName.string() + " in " + context)
 {   }
 
@@ -44,19 +44,19 @@ InvalidValue::InvalidValue(const std::string& itemName, const std::string& conte
     : Exception("Invalid " + itemName + " at " + context)
 {   }
 
-ReadFileException::ReadFileException(const boost::filesystem::path& fileName)
+ReadFileException::ReadFileException(const fs::path& fileName)
     : Exception(fileName.string() + ": could not be read")
 {   }
 
-ReadFileException::ReadFileException(const boost::filesystem::path& fileName, const std::string& context)
+ReadFileException::ReadFileException(const fs::path& fileName, const std::string& context)
     : Exception(fileName.string() + ": could not be read - see " + context)
 {   }
 
-WriteFileException::WriteFileException(const boost::filesystem::path& fileName)
+WriteFileException::WriteFileException(const fs::path& fileName)
     : Exception(fileName.string() + ": could not write")
 {   }
 
-WriteFileException::WriteFileException(const boost::filesystem::path& fileName, const std::string& context)
+WriteFileException::WriteFileException(const fs::path& fileName, const std::string& context)
     : Exception(fileName.string() + ": could not write - see " + context)
 {   }
 

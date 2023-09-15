@@ -2,15 +2,17 @@
 #ifndef FOUNDATION_YAML_DOCUMENT_HEADER__
 #define FOUNDATION_YAML_DOCUMENT_HEADER__
 #include <Foundation/Logger.h>
-#include <boost/filesystem.hpp>
-#include <boost/shared_ptr.hpp>
 #include <yaml-cpp/yaml.h>
 #include <vector>
 #include <map>
+#include <memory>
+#include <filesystem>
 
 /// Extensions to yaml-cpp
 namespace YAML
 {
+namespace fs = std::filesystem;
+
 // The name corresponding to \c type
     std::string
 to_string(NodeType::value type);
@@ -20,8 +22,8 @@ class Document
 {
 public: // Types
     typedef std::string StringType;
-    typedef boost::shared_ptr<StringType> StringPtr;
-    typedef boost::filesystem::path PathType;
+    typedef std::shared_ptr<StringType> StringPtr;
+    typedef fs::path PathType;
     typedef std::vector<StringType> StringStore;
 
     /// A key for updating an update
@@ -50,6 +52,7 @@ public: // Types
     private: // Accessors
         bool HasInternalIndex() const { return !updatePath.empty(); }
         size_t InternalIndex() const { return updatePath.back(); }
+		/// A copy without the shallowest level index. Precondition: HasInternalIndex()
         UpdateMark InternalUpdateMark() const;
     };
 
@@ -301,13 +304,13 @@ public: // Methods
     void ResetUpdates();
 
 protected: // Support methods
-    /// The location of the first character after any anchor (if any) starting at \c mark
+    /// The location of the first character after any anchor (if any) starting at \c mark. Precondition: 0 <= mark.pos
     Mark AnchorEnd(const Mark& mark) const;
 
     /// The location of the first character of an anchor starting at \c mark
     Mark AnchorStart(const Mark& mark) const;
 
-    /// The location of the first character after null starting at \c mark
+    /// The location of the first character after null starting at \c mark. Precondition: 0 <= mark.pos
     Mark NullEnd(const Mark& mark) const;
 
     /// The Yaml items starting at \c location
@@ -393,7 +396,7 @@ class DocumentStream
 {
 public: // Types
     typedef std::string StringType;
-    typedef boost::filesystem::path PathType;
+    typedef fs::path PathType;
 
 public: // Constants
     static const char* Separator;
@@ -425,8 +428,8 @@ class DocumentTemplate
 {
 public: // Types
     typedef std::string StringType;
-    typedef boost::shared_ptr<StringType> StringPtr;
-    typedef boost::filesystem::path PathType;
+    typedef std::shared_ptr<StringType> StringPtr;
+    typedef fs::path PathType;
 
 protected: // Attributes
     Document m_doc; //!< The indexed original text

@@ -1,15 +1,8 @@
-#ifndef _LOGGER_HEADER_
-#define _LOGGER_HEADER_
+#ifndef FOUNDATION_LOGGER_HEADER_
+#define FOUNDATION_LOGGER_HEADER_
 
 #include <Foundation/Config.h>
-
-#ifdef _MSC_VER
-#include <tchar.h>
-#pragma warning (disable :  4275) // non dll-interface class 'std::_Container_base_aux' used as base for dll-interface class 'std::_Container_base_aux_alloc_real<_Alloc>'
-#pragma warning (disable :  4251) // 'std::_Container_base_aux_alloc_real<_Alloc>::_Alaux' : class 'std::allocator<_Ty>' needs to have dll-interface to be used by clients of class 'std::_Container_base_aux_alloc_real<_Alloc>'
-#else
-#define _T(str) str
-#endif
+#include <filesystem>
 
 // Remove path names from executables
 #include <log4cxx/log4cxx.h>
@@ -21,7 +14,6 @@
 #endif
 
 #include <log4cxx/logger.h>
-#include <log4cxx/logmanager.h>
 #undef max
 #undef min
 #include <ostream>
@@ -42,7 +34,7 @@ public: // ...structors
     ScopedLevelChange(const StringType& loggerName, const LevelPtr& level)
         : m_logger(Logger::getLogger(loggerName))
     {
-        if (m_logger || !!(m_logger = LogManager::getLogger(loggerName)))
+        if (m_logger || !!(m_logger = Logger::getLogger(loggerName)))
         {
             m_savedLevel = m_logger->getLevel();
             m_logger->setLevel(level);
@@ -64,18 +56,10 @@ public: // ...structors
 
 } // namespace log4cxx
 
-#ifdef LOG4CXX_STR
-// A string parameter type for version 0.10.0
-typedef log4cxx::LogString LoggerStringType;
-#else
-// A string parameter type for version 0.9.7
-typedef log4cxx::String LoggerStringType;
-#endif
-namespace boost { namespace filesystem { class path; } }
-
 namespace Foundation
 {
 
+namespace fs = std::filesystem;
 using LoggerPtr = log4cxx::LoggerPtr;
 
 /// Retrieve the \c name logger pointer.
@@ -87,7 +71,7 @@ LoggerPtr GetLogger(const std::string& name);
 bool GetPropertiesFile(log4cxx::File& propertyFile);
 
 /// Initialise Log4cxx by reading the properties file
-void InitialiseLogger(boost::filesystem::path* configFileUsed = 0);
+void InitialiseLogger(fs::path* configFileUsed = 0);
 
 typedef std::ostream& (*oStreamFunc)(std::ostream&);
 
@@ -218,4 +202,4 @@ operator<<(std::ostream& os, const CommaSeparatedItems<T>& v)
 
 } // namespace Foundation
 
-#endif // _LOGGER_HEADER_
+#endif // FOUNDATION_LOGGER_HEADER_

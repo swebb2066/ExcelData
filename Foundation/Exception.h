@@ -2,10 +2,12 @@
 #define FOUNDATION_EXCEPTION_HDR_
 #include <exception>
 #include <string>
-#include <boost/filesystem/path.hpp>
+#include <filesystem>
 
 namespace Foundation
 {
+
+namespace fs = std::filesystem;
 
 class Exception : public std::exception
 {
@@ -30,15 +32,15 @@ public: // ...stuctors
 class MissingFileException : public Exception
 {
 public: // ...stuctors
-    MissingFileException(const boost::filesystem::path& fileName);
-    MissingFileException(const boost::filesystem::path& fileName, const std::string& context);
+    MissingFileException(const fs::path& fileName);
+    MissingFileException(const fs::path& fileName, const std::string& context);
 };
 
 class BadFileException : public Exception
 {
 public: // ...stuctors
-    BadFileException(const std::string& msg, const boost::filesystem::path& fileName);
-    BadFileException(const std::string& msg, const boost::filesystem::path& fileName, const std::string& context);
+    BadFileException(const std::string& msg, const fs::path& fileName);
+    BadFileException(const std::string& msg, const fs::path& fileName, const std::string& context);
 };
 
 class InvalidValue : public Exception
@@ -50,15 +52,15 @@ public: // ...stuctors
 class ReadFileException : public Exception
 {
 public: // ...stuctors
-    ReadFileException(const boost::filesystem::path& fileName);
-    ReadFileException(const boost::filesystem::path& fileName, const std::string& context);
+    ReadFileException(const fs::path& fileName);
+    ReadFileException(const fs::path& fileName, const std::string& context);
 };
 
 class WriteFileException : public Exception
 {
 public: // ...stuctors
-    WriteFileException(const boost::filesystem::path& fileName);
-    WriteFileException(const boost::filesystem::path& fileName, const std::string& context);
+    WriteFileException(const fs::path& fileName);
+    WriteFileException(const fs::path& fileName, const std::string& context);
 };
 
 class UnsupportedValueException : public Exception

@@ -10,6 +10,7 @@ add_subdirectory(Foundation)
 
 add_executable(excel2csv
   Excel2csv.cpp
+  CellRowIterator.cpp
   Excel.cpp
 )
 target_include_directories(excel2csv
