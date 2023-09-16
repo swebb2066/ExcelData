@@ -329,6 +329,11 @@ auto Book::GetSheetCount() const -> int
     return IsValid() ? GetDispatchCount(m_impl->pXLWorkSheets, GetInstance().lcid) : 0;
 }
 
+void Book::Unload()
+{
+    m_impl.reset();
+}
+
 struct Sheet::Impl
 {
     IDispatch* pXLWorkSheet;
@@ -359,11 +364,14 @@ auto Book::GetSheet(const std::regex& selector, int afterItem) const -> SheetPos
     auto sheetCount = GetSheetCount();
     for (result.second = afterItem + 1; result.second <= sheetCount; ++result.second)
     {
-        result.first = GetSheet(result.second);
-        if (result.first.IsValid())
+        auto item = GetSheet(result.second);
+        if (item.IsValid())
         {
-            if (std::regex_match(result.first.GetName(), selector))
+            if (std::regex_match(item.GetName(), selector))
+            {
+                result.first = item;
                 break;
+            }
         }
     }
     return result;
@@ -438,7 +446,7 @@ Sheet::Iterator::~Iterator()
     bool
 Sheet::Iterator::Off() const
 {
-    return !m_impl->current.first.m_impl->pXLWorkSheet;
+    return !m_impl->current.first.IsValid();
 }
 
 // Move to the first sheet in \c book matching \c sheetPattern
@@ -479,6 +487,10 @@ Sheet::Iterator::Forth()
     m_item = m_impl->current.first;
 }
 
+Rows::Rows()
+{
+}
+
 Rows::Rows(const Sheet& parent) : m_impl(std::make_shared<Impl>(parent))
 {
 }
@@ -489,18 +501,22 @@ Rows::~Rows()
 
 auto Rows::operator==(const Rows& other) const -> bool
 {
-    return other.m_impl->pXLRows == m_impl->pXLRows;
+    return other.m_impl && m_impl && other.m_impl->pXLRows == m_impl->pXLRows;
 }
 
 auto Rows::IsValid() const -> bool
 {
-    return !!m_impl->pXLRows;
+    return m_impl && m_impl->pXLRows;
+}
+
+void Rows::Reset()
+{
+    m_impl.reset();
 }
 
 struct Rows::Iterator::Impl
 {
     RowsPosition current;
-    Cells cells;
     Impl(const Sheet& sheet)
         : current(sheet.GetRows(), 0)
     {
@@ -535,8 +551,7 @@ Rows::Iterator::Start(const Sheet& sheet)
 Rows::Iterator::Start()
 {
     m_impl->current.second = 1;
-    m_impl->cells = m_impl->current.first.GetCells(1);
-    m_item = m_impl->cells.GetData();
+    m_item = m_impl->current.first.GetCells(1).GetData();
 }
 
 
@@ -545,16 +560,16 @@ Rows::Iterator::Start()
 Rows::Iterator::Forth()
 {
     ++m_impl->current.second;
-    m_impl->cells = m_impl->current.first.GetCells(m_impl->current.second);
-    m_item = m_impl->cells.GetData();
+    m_item = m_impl->current.first.GetCells(m_impl->current.second).GetData();
+    if (Off())
+        m_impl->current.first.Reset();
 }
 
 struct Cells::Impl
 {
     IDispatch* pXLCells;
     CellRow data;
-    Impl()
-        : pXLCells(NULL)
+    Impl() : pXLCells(NULL)
     {
     }
     ~Impl()
@@ -594,7 +609,7 @@ auto Cells::GetData() const -> CellRow
     {
         auto pItem = GetDispatchItem(m_impl->pXLCells, 1, GetInstance().lcid, "Cells");
         _variant_t itemData;
-        if (pItem && GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData))
+        if (pItem && GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData) && (VT_ARRAY|VT_VARIANT) == itemData.vt)
         {
             SafeArrayData sa(itemData.parray);
             m_impl->data.resize(sa.DimensionSize(1));

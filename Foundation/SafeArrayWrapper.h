@@ -209,7 +209,7 @@ public: // Accessors
         for (index[dim2] = m_lBound[dim2]; i != end && index[dim2] <= m_uBound[dim2]; ++index[dim2])
             for (index[dim1] = m_lBound[dim1]; i != end && index[dim1] <= m_uBound[dim1]; ++index[dim1])
             {
-                VARIANT v;
+                _variant_t v;
                 SafeArrayGetElement(m_data, index, &v);
                 *i = _bstr_t(v);
                 ++i;

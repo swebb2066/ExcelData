@@ -2,6 +2,7 @@
 #include <Foundation/YamlDocument.h>
 #include <Foundation/LogMessages.h>
 #include <Foundation/StdLogger.h>
+#include <Foundation/Memory.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
@@ -365,6 +366,7 @@ namespace po = boost::program_options;
         return 1;
     }
     LOG4CXX_INFO(log_s, "Mapping configured from " << mapfile);
+    HeapChangeLogger h(log_s);
     fs::path paramfile;
     if (0 < vm.count("map-params"))
     {
@@ -419,6 +421,7 @@ namespace po = boost::program_options;
         std::cerr << ex.what() << "\n";
         return 1;
     }
+    h("exit");
     Foundation::CleanExitLogMessage(log_s);
     return 0;
 }

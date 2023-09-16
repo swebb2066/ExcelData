@@ -7,6 +7,7 @@ set(SRC_FILES
   FileIterator.cpp
   Logger.cpp
   LogMessages.cpp
+  Memory.cpp
   Yaml.cpp
   YamlDocument.cpp
   SafeArrayWrapper.cpp

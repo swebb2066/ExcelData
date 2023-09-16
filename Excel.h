@@ -30,6 +30,8 @@ public: // Accessors
 public: // Methods
     /// Make \c excelFilePath available. Precondition: CanLoad()
     bool Load(const fs::path& excelFilePath);
+    /// Release the current book.
+    void Unload();
 };
 
 class Rows;
@@ -49,6 +51,8 @@ public: // Accessors
     auto GetRows() const -> Rows;
     auto GetRows(const std::regex& selector) const -> RowsPosition;
 public: // Methods
+    /// Release the current sheet.
+    void Reset();
 public: // Inner classes
     class Iterator;
     friend class Book;
@@ -80,6 +84,7 @@ class Rows
 private: // Attributes
     DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
 public: // ...structors
+    Rows();
     Rows(const Sheet& parent);
     ~Rows();
 public: // Accessors
@@ -87,6 +92,8 @@ public: // Accessors
     bool IsValid() const;
     auto GetCells(int row) const -> Cells;
 public: // Methods
+    /// Release the current sheet.
+    void Reset();
 public: // Inner classes
     class Iterator;
     friend class Sheet;

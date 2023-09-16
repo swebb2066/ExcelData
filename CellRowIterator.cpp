@@ -1,5 +1,6 @@
 #include <Foundation/FileIterator.h>
 #include <Foundation/StdLogger.h>
+#include <Foundation/Memory.h>
 #include "CellRowIterator.h"
 #include "Excel.h"
 
@@ -73,7 +74,8 @@ bool CellRowIterator::StartBook()
 {
     while (!m_impl->fileIter->Off())
     {
-        LOG4CXX_DEBUG(m_impl->log, "StartBook: " << m_impl->fileIter->Item());
+        m_impl->currentBook.Unload();
+        LOG4CXX_DEBUG(m_impl->log, "StartBook: " << m_impl->fileIter->Item() << " heapUsed " << HeapUsed());
         if (m_impl->currentBook.Load(m_impl->fileIter->Item()))
         {
             m_impl->sheetIter.Start(m_impl->currentBook, m_impl->sheetPattern);
@@ -107,7 +109,7 @@ bool CellRowIterator::StartSheet()
 bool CellRowIterator::SetItem()
 {
     m_item = m_impl->rowIter.Item();
-    LOG4CXX_DEBUG(m_impl->log, "At: " << m_impl->rowIter.Item());
+    LOG4CXX_TRACE(m_impl->log, "At: " << m_impl->rowIter.Item());
     return !m_item.empty();
 }
 
