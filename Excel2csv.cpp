@@ -7,7 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include "CellRowIterator.h"
+#include "ExcelIterator.h"
 
 static const char* usageMsg =
 "Search .xls or .xlsx files\n"
@@ -256,19 +256,57 @@ OutputValue(std::ostream& os, const std::string& tagName, const YAML::Node& node
     os << '"';
 }
 
+auto GetPattern(const YAML::Node& selector, const std::string& defaultValue = std::string()) -> std::string
+{
+    std::string pattern;
+    if (selector.IsScalar())
+        pattern = selector.Scalar();
+    else if (!selector.IsSequence())
+        pattern = defaultValue;
+    else for (auto node : selector)
+        pattern += node.Scalar();
+    return pattern;
+}
+
+using StringVector = std::vector<std::string>;
+using IteratorPtr = std::unique_ptr<Foundation::Iterator<StringVector>>;
+namespace fs = std::filesystem;
+
+auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
+{
+    static auto log_s(log4cxx::Logger::getLogger("excel2csv.GetIterator"));
+    std::string namePattern("*(.xls|.xlsx)"); // All Excel files in dir
+    if (auto fileSelector = yaml["Path"])
+        namePattern = GetPattern(fileSelector, namePattern);
+    auto rootDir = dir.empty() ? fs::current_path() : dir;
+    LOG4CXX_DEBUG(log_s, "namePattern " << namePattern << " in " << rootDir);
+    auto selector = std::make_shared<Foundation::PathSelector>(namePattern, rootDir);
+    IteratorPtr result;
+    if (auto sheets = yaml["Sheet"])
+    {
+        auto rowIter = std::make_unique<Excel::CellRowIterator>(std::make_unique<Foundation::FileIterator>(rootDir, selector), GetPattern(sheets));
+        if (auto cells = yaml["Cells"])
+            rowIter->PutCellPattern(GetPattern(cells));
+        result = std::move(rowIter);
+    }
+    else
+        result = std::make_unique<Excel::SheetIterator>(std::make_unique<Foundation::FileIterator>(rootDir, selector));
+    return result;
+}
+
 // Put the values onto \c os from documents in \c inputPath using \c mapping
     void
 ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::DocumentTemplate& mapping)
 {
-    static auto log_s(log4cxx::Logger::getLogger("ProcessDocuments"));
+    static auto log_s(log4cxx::Logger::getLogger("excel2csv.ProcessDocuments"));
     auto mappingData = mapping.GetOriginalData();
     auto mappingDoc = mapping.GetOriginalDocument();
-    Excel::CellRowIterator input(inputPath, mappingData["Input"]);
+    auto input = GetIterator(inputPath, mappingData["Input"]);
     auto output = mappingData["Output"];
     std::vector<std::string> lastKey;
-    for (input.Start(); !input.Off(); input.Forth())
+    for (input->Start(); !input->Off(); input->Forth())
     {
-        LOG4CXX_DEBUG(log_s, "lineItemSize " << input.Item().size());
+        LOG4CXX_DEBUG(log_s, "lineItemSize " << input->Item().size());
         auto keyIndex = 0;
         bool keyChanged = false;
         for (auto field : output)
@@ -292,7 +330,7 @@ ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::Docume
         }
         if (0 == keyIndex || keyChanged)
         {
-            OutputLine(os, input.Item());
+            OutputLine(os, input->Item());
         }
     }
 }
@@ -366,7 +404,7 @@ namespace po = boost::program_options;
         return 1;
     }
     LOG4CXX_INFO(log_s, "Mapping configured from " << mapfile);
-    HeapChangeLogger h(log_s);
+    //HeapChangeLogger h(log_s);
     fs::path paramfile;
     if (0 < vm.count("map-params"))
     {
@@ -421,7 +459,7 @@ namespace po = boost::program_options;
         std::cerr << ex.what() << "\n";
         return 1;
     }
-    h("exit");
+    //h("exit");
     Foundation::CleanExitLogMessage(log_s);
     return 0;
 }

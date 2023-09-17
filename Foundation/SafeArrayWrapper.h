@@ -87,8 +87,8 @@ public: // Accessors
     }
 
     /// Extract the element at \c index from the SafeArray into \c result
-    template <typename T>
-    void GetElement(long index[2], T* result) const
+    template <typename T, typename C = T>
+    void GetElement(long index[2], T& result) const
     {
         switch (m_valueType)
         {
@@ -96,53 +96,59 @@ public: // Accessors
             {
                 LONG value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
             case VT_UI4:
             {
                 ULONG value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
             case VT_UI1:
             {
                 BYTE value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
             case VT_I2:
             {
                 SHORT value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
             case VT_R4:
             {
                 FLOAT value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
             case VT_R8:
             {
                 DOUBLE value;
                 SafeArrayGetElement(m_data, index, &value);
-                *result = T(value);
+                result = C(value);
                 break;
             }
+            case VT_VARIANT:
+            {
+                _variant_t value;
+                SafeArrayGetElement(m_data, index, &value);
+                result = C(value);
+            }
         }
-        LOG4CXX_DEBUG(m_log, "GetElement:" << " type " << m_valueType << " index [" << index[0] << ", " << index[1] << "] result " << *result);
+        LOG4CXX_DEBUG(m_log, "GetElement:" << " type " << m_valueType << " index [" << index[0] << ", " << index[1] << "] result " << result);
     }
 
     /// Replace the element at \c index with \c newVal
     template <typename T>
     void PutElement(long index[2], const T& newVal) const
     {
-        LOG4CXX_DEBUG(m_log, "GetElement:" << " type " << m_valueType << " index [" << index[0] << ", " << index[1] << "] value " << newVal);
+        LOG4CXX_DEBUG(m_log, "PutElement:" << " type " << m_valueType << " index [" << index[0] << ", " << index[1] << "] value " << newVal);
         switch (m_valueType)
         {
             case VT_I4:
@@ -194,7 +200,7 @@ public: // Accessors
         int i = 0;
         for (index[dim2] = m_lBound[dim2]; i < vecSize && index[dim2] <= m_uBound[dim2]; ++index[dim2])
             for (index[dim1] = m_lBound[dim1]; i < vecSize && index[dim1] <= m_uBound[dim1]; ++index[dim1])
-                GetElement(index, &vec[i++]);
+                GetElement(index, vec[i++]);
         return i;
     }
 
@@ -208,12 +214,7 @@ public: // Accessors
         OutIter i = begin;
         for (index[dim2] = m_lBound[dim2]; i != end && index[dim2] <= m_uBound[dim2]; ++index[dim2])
             for (index[dim1] = m_lBound[dim1]; i != end && index[dim1] <= m_uBound[dim1]; ++index[dim1])
-            {
-                _variant_t v;
-                SafeArrayGetElement(m_data, index, &v);
-                *i = _bstr_t(v);
-                ++i;
-            }
+                GetElement<std::string, _bstr_t>(index, *i++);
         return i - begin;
     }
 
@@ -236,7 +237,7 @@ public: // Methods
             if (2 < nDims && indices[0] == m_lBound[0] && indices[1] == m_lBound[1])
                 os << "[:,:," << Foundation::CommaSeparatedArray<long>(&indices[2], nDims-2) << ']' << std:: endl;
             double value;
-            GetElement(indices, &value);
+            GetElement(indices, value);
             os << value;
             more = false;
             for (iDim = 0; !more && iDim < nDims; ++iDim)
@@ -351,7 +352,7 @@ public: // Methods
         // Get the indixes of the first element
         m_source.GetLowIndex(m_index, 2);
         // Get the first element
-        m_source.GetElement(m_index, &m_item);
+        m_source.GetElement(m_index, m_item);
         LOG4CXX_DEBUG(m_source.Log(), "Start:" << " activeDim " << m_activeDim << " at " << m_index[0] << ',' << m_index[1]);
     }
 
@@ -361,7 +362,7 @@ public: // Methods
         ++m_index[m_activeDim];
         if (!Off())
         {
-            m_source.GetElement(m_index, &m_item);
+            m_source.GetElement(m_index, m_item);
             LOG4CXX_DEBUG(m_source.Log(), "At:" << " " << m_index[0] << ',' << m_index[1]);
         }
     }
@@ -439,7 +440,7 @@ public: // Methods
         {
             for (int j = 0; j < (int)m_item.first.size(); ++j)
             {
-                m_source.GetElement(m_index, &m_item.first[j]);
+                m_source.GetElement(m_index, m_item.first[j]);
                 ++m_index[m_vectorDim];
             }
             m_index[m_vectorDim] -= (long)m_item.first.size();
@@ -448,7 +449,7 @@ public: // Methods
             {
                 for (int j = 0; j < (int)m_item.second.size(); ++j)
                 {
-                    m_source.GetElement(m_index, &m_item.second[j]);
+                    m_source.GetElement(m_index, m_item.second[j]);
                     ++m_index[m_vectorDim];
                 }
                 m_index[m_vectorDim] -= (long)m_item.second.size();
@@ -591,7 +592,7 @@ public: // Methods
             // Convert the values
             for (int j = 0; j < (int)m_item.size(); ++j)
             {
-                m_source.GetElement(m_index, &m_item[j]);
+                m_source.GetElement(m_index, m_item[j]);
                 ++m_index[m_vectorDim];
             }
             m_index[m_vectorDim] -= (long)m_item.size();

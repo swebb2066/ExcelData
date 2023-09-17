@@ -69,8 +69,8 @@ public: // Accessors
     /// Is this iterator beyond the end or before the start?
     bool Off() const override;
 public: // Methods
-    /// Move to the first sheet in \c book matching \c sheetPattern
-    void Start(const Book& book, const std::string& sheetPattern);
+    /// Move to the first sheet in \c book matching the regex \c sheetPattern
+    void Start(const Book& book, const std::string& sheetPattern = std::string());
     /// Move to the first sheet
     void Start() override;
     /// Move to the next sheet. Precondition: !Off()
