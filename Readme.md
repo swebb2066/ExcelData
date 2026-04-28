@@ -32,10 +32,23 @@ Parameters:
 Input:
   Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
   Sheet: Transactions
-  Cells: A1:D999
 ---
 ````
 
+Example 2: Extract a cell range from transaction sheets
+----------
+```yaml
+Parameters:
+  - Name: NamePrefix
+    Value: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+  - Name: Location
+    Value: [Family Trust, Super Fund]
+Input:
+  Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
+  Sheet: Transactions
+  Cells: A1:D999
+---
+````
 Parameter file syntax
 =====================
 

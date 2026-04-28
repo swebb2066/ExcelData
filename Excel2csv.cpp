@@ -1,5 +1,6 @@
 #include <Foundation/Environment.h>
 #include <Foundation/YamlDocument.h>
+#include <Foundation/Logger.h>
 #include <Foundation/LogMessages.h>
 #include <Foundation/StdLogger.h>
 #include <Foundation/Memory.h>
@@ -46,8 +47,21 @@ static const char* mapFileParam =
 "Example 1: Extract all transaction sheets\n"
 "----------\n"
 "Parameters:\n"
-"  - &NamePrefix xxxxx\n"
-"  - &Location xxxxx\n"
+"- Name: NamePrefix\n"
+"  Value: [19, 20]\n"
+"- Name: Location\n"
+"  Value: [Family Trust, Super Fund]\n"
+"Input:\n"
+"  Path: [*Location, \"*/\", *NamePrefix, \" Personal Expenses.xls\"]\n"
+"  Sheet: Transactions\n"
+"---\n"
+"Example 2: Extract a cell range from transaction sheets\n"
+"----------\n"
+"Parameters:\n"
+"- Name: NamePrefix\n"
+"  Value: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]\n"
+"- Name: Location\n"
+"  Value: [Family Trust, Super Fund]\n"
 "Input:\n"
 "  Path: [*Location, \"*/\", *NamePrefix, \" Personal Expenses.xls\"]\n"
 "  Sheet: Transactions\n"
@@ -146,7 +160,7 @@ private: // Class data
 };
 
     log4cxx::LoggerPtr
-MappingIterator::m_log(log4cxx::Logger::getLogger("MappingIterator"));
+MappingIterator::m_log(Foundation::GetLogger("MappingIterator"));
 
 // Put \c output field values onto \c os
     void
@@ -167,7 +181,6 @@ OutputLine(std::ostream& os, const Excel::CellRow& output)
     void
 OutputValue(std::ostream& os, const std::string& tagName, const YAML::Node& node)
 {
-    static log4cxx::LoggerPtr log_s(log4cxx::Logger::getLogger("OutputValue"));
     os << '"';
     if (node.IsScalar())
         os << node.Scalar();
@@ -198,7 +211,7 @@ namespace fs = std::filesystem;
 
 auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
 {
-    static auto log_s(log4cxx::Logger::getLogger("excel2csv.GetIterator"));
+    static auto log_s(Foundation::GetLogger("excel2csv.GetIterator"));
     std::string namePattern("*(.xls|.xlsx)"); // All Excel files in dir
     if (auto fileSelector = yaml["Path"])
         namePattern = GetPattern(fileSelector, namePattern);
@@ -222,7 +235,7 @@ auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
     void
 ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::DocumentTemplate& mapping)
 {
-    static auto log_s(log4cxx::Logger::getLogger("excel2csv.ProcessDocuments"));
+    static auto log_s(Foundation::GetLogger("excel2csv.ProcessDocuments"));
     auto mappingData = mapping.GetOriginalData();
     auto mappingDoc = mapping.GetOriginalDocument();
     auto input = GetIterator(inputPath, mappingData["Input"]);
@@ -265,8 +278,6 @@ namespace po = boost::program_options;
 int main(int argc, char* argv[])
 {
     // Declare the supported options.
-
-namespace po = boost::program_options;
     po::options_description desc(usageMsg, 160);
     desc.add_options()
         ("help,h", "display optional parameter descriptions")
