@@ -25,96 +25,16 @@ Example 1: Extract all transaction sheets
 ----------
 ```yaml
 Parameters:
-  - &NamePrefix xxxxx
-  - &Location xxxxx
+  - Name: NamePrefix
+    Value: [19, 20]
+  - Name: Location
+    Value: [Family Trust, Super Fund]
 Input:
   Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
   Sheet: Transactions
+  Cells: A1:D999
 ---
 ````
-
-Example 2: Extract totals
-----------
-```yaml
-Parameters:
-  - &NamePrefix xxxxxx
-Input:
-  Path: [*NamePrefix, "*Personal Expenses.xls"]
-  Sheet: Transactions
-Accumulate:
-  - Name: TotalPlannedArea
-    Value: !area [PartTrackArea]
-  - Name: TotalBadAngleArea
-    Value: !area [ExtremeAngleToSurfacePortion, PartTrackArea, x]
-  - Name: TotalTargetedArea
-    Value: !area [SectionTrackArea]
-  - Name: Duration
-    Value: !duration [TotalDuration]
-Output:
-  - Name: Task
-    Value: *NamePrefix
-    IsKey: true
-  - Name: Total Targeted Area (m^2)
-    Value: !area [TotalTargetedArea]
-  - Name: Total Planned Area (m^2)
-    Value: !area [TotalPlannedArea]
-  - Name: Planned %
-    Value: !area [TotalTargetedArea, TotalPlannedArea, /, 100, x]
-  - Name: Bad Angle Area (m^2)
-    Value: !area [TotalBadAngleArea]
-  - Name: Effective %
-    Value: !area [TotalTargetedArea, TotalBadAngleArea, TotalPlannedArea, -, /, 100, x]
-  - Name: Total Duration (hrs)
-    Value: !duration [3600, 2, Duration, /, /]
----
-```
-
-Example 3: Extract totals from selected nodes
-----------
-```yaml
-ParameterCombinations:
-- Name: Location
-  Value: [ Front, Back ]
-- Name: Dataset
-  Value: [ Wagon_1, Wagon_2, Wagon_3, Wagon_4, Wagon_5
-         , Wagon_6, Wagon_7, Wagon_8, Wagon_9, Wagon_10]
-Parameters:
-  - &Location xxxxxx
-  - &Dataset dddddd
-InputPath: [*Location, /, *Location, " ", *Dataset, " */*Personal Expenses.xls"]
-Select:
-  SectionName: [., Section, ".*Torsion Box"]
-Input:
-  ExtremeAngleToSurfacePortion: [Parts,.,ExtremeAngleToSurfacePortion]
-  PartTrackArea: [Parts,.,TrackArea]
-  SectionDuration: [Duration]
-  SectionTrackArea: [TrackArea]
-Accumulate:
-  - Name: TotalPlannedArea
-    Value: !area [PartTrackArea]
-  - Name: TotalBadAngleArea
-    Value: !area [ExtremeAngleToSurfacePortion, PartTrackArea, x]
-  - Name: TotalTargetedArea
-    Value: !area [SectionTrackArea]
-  - Name: TotalDuration
-    Value: !duration [SectionDuration]
-Output:
-  - Name: Torsion Box
-    Value: [ *Location, " ", *Dataset ]
-    IsKey: true
-  - Name: Total Targeted Area (m^2)
-    Value: !area [TotalTargetedArea]
-  - Name: Total Planned Area (m^2)
-    Value: !area [TotalPlannedArea]
-  - Name: Planned %
-    Value: !area [TotalTargetedArea, TotalPlannedArea, /, 100, x]
-  - Name: Bad Angle Area (m^2)
-    Value: !area [TotalBadAngleArea]
-  - Name: Effective %
-    Value: !area [TotalTargetedArea, TotalBadAngleArea, TotalPlannedArea, -, /, 100, x]
-  - Name: Total Duration (hrs)
-    Value: !duration [3600, TotalDuration, /]
-```
 
 Parameter file syntax
 =====================
