@@ -3,16 +3,16 @@ from conan.tools.cmake import CMake, cmake_layout
 
 class Excel2csvConan(ConanFile):
     name = "Excel2csv"
-    version = "0.0"
+    version = "0.1"
     author = "Stephen Webb swebb2066@gmail.com"
-    url = "https://github.com/swebb2066/excel2csv"
+    url = "https://github.com/swebb2066/ExcelData"
     description = "Generate a comma separated values (CSV) file from .xls or .xlsx files"
     topics = ("Excel", "CSV")
     settings = "os", "compiler", "build_type", "arch"
     requires = (
-        "log4cxx/1.1.0@",
-        "boost/1.83.0@",
-        "yaml-cpp/0.8.0@",
+        "log4cxx/1.6.1@",
+        "boost/1.90.0@",
+        "yaml-cpp/0.9.0@",
         )
     generators = ("CMakeDeps", "CMakeToolchain")
 
