@@ -1,6 +1,9 @@
 A command line utility to extract data from Excel files using Excel's COM interface.
 
 Allowed options:
+
+| Flag | Description |
+| ---- | ----------- |
 |  -h [ --help ]         |  display optional parameter descriptions |
 | | |
 |  -r [ --input-root ] arg | The directory to search for input data. |
@@ -20,6 +23,7 @@ Each element in the output list specifies a name and a value (optionally as a re
 
 Example 1: Extract all transaction sheets
 ----------
+```yaml
 Parameters:
   - &NamePrefix xxxxx
   - &Location xxxxx
@@ -27,9 +31,11 @@ Input:
   Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
   Sheet: Transactions
 ---
+````
 
 Example 2: Extract totals
 ----------
+```yaml
 Parameters:
   - &NamePrefix xxxxxx
 Input:
@@ -61,9 +67,11 @@ Output:
   - Name: Total Duration (hrs)
     Value: !duration [3600, 2, Duration, /, /]
 ---
+```
 
 Example 3: Extract totals from selected nodes
 ----------
+```yaml
 ParameterCombinations:
 - Name: Location
   Value: [ Front, Back ]
@@ -106,6 +114,7 @@ Output:
     Value: !area [TotalTargetedArea, TotalBadAngleArea, TotalPlannedArea, -, /, 100, x]
   - Name: Total Duration (hrs)
     Value: !duration [3600, TotalDuration, /]
+```
 
 Parameter file syntax
 =====================
@@ -115,18 +124,22 @@ Output is generated for each combination in the cross product of variable values
 
 Example 1:
 ----------
-
+```yaml
 - Name: NamePrefix
   Value: [19, 20]
 - Name: Location
   Value: [Family Trust, Super Fund]
 ---
+```
 
 Example 2:
 ----------
+```yaml
 - Name: NamePrefix
   Value: [ 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023 ]
 ---
-# The list of parameter values may alternatively be provided
-# in the 'ParameterCombinations' section of the map file.
+```
+
+The list of parameter values may alternatively be provided
+in the 'ParameterCombinations' section of the map file.
 

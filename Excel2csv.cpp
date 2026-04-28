@@ -10,7 +10,7 @@
 #include "ExcelIterator.h"
 
 static const char* usageMsg =
-"Search .xls or .xlsx files\n"
+"A command line utility to extract data from Excel files using Excel's COM interface.\n"
 "Allowed options"
 ;
 
