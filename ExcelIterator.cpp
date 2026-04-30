@@ -14,12 +14,12 @@ struct CellRowIterator::Impl
     std::string sheetPattern;
     Rows::Iterator rowIter;
     std::string cellPattern;
-    Foundation::LoggerPtr log;
+    std::string namePattern;
     Impl(FileIteratorPtr xlFileSource, const std::string& sheetPattern_)
         : fileIter(std::move(xlFileSource))
         , sheetPattern(sheetPattern_)
-        , log(Foundation::GetLogger("CellRowIterator"))
         {}
+    Foundation::LoggerPtr log = Foundation::GetLogger("CellRowIterator");
 };
 
 CellRowIterator::CellRowIterator(FileIteratorPtr xlFileSource, const std::string& sheetPattern)
@@ -29,7 +29,14 @@ CellRowIterator::CellRowIterator(FileIteratorPtr xlFileSource, const std::string
 
 void CellRowIterator::PutCellPattern(const std::string& cells)
 {
+    LOG4CXX_DEBUG(m_impl->log, "PutCellPattern: " << cells);
     m_impl->cellPattern = cells;
+}
+
+void CellRowIterator::PutNamePattern(const std::string& names)
+{
+    LOG4CXX_DEBUG(m_impl->log, "PutNamePattern: " << names);
+    m_impl->namePattern = names;
 }
 
 /// Is this iterator beyond the end or before the start?
@@ -38,6 +45,7 @@ bool CellRowIterator::Off() const { return m_item.empty(); }
 /// Move to the first item
 void CellRowIterator::Start()
 {
+    LOG4CXX_TRACE(m_impl->log, "Start:");
     m_item.clear();
     m_impl->fileIter->Start();
     StartBook();
@@ -50,7 +58,7 @@ void CellRowIterator::Forth()
     m_impl->rowIter.Forth();
     if (!m_impl->rowIter.Off())
         SetItem();
-    else
+    else if (m_impl->namePattern.empty())
     {
         m_impl->sheetIter.Forth();
         if (!StartSheet())
@@ -59,20 +67,45 @@ void CellRowIterator::Forth()
             StartBook();
         }
     }
+    else
+    {
+        m_impl->fileIter->Forth();
+        StartBook();
+    }
+
 }
 
 /// Load the first sheet in the current file.
 bool CellRowIterator::StartBook()
 {
+    LOG4CXX_TRACE(m_impl->log, "StartBook: ");
     while (!m_impl->fileIter->Off())
     {
         m_impl->currentBook.Unload();
         LOG4CXX_DEBUG(m_impl->log, "StartBook: " << m_impl->fileIter->Item() << " heapUsed " << HeapUsed());
         if (m_impl->currentBook.Load(m_impl->fileIter->Item()))
         {
-            m_impl->sheetIter.Start(m_impl->currentBook, m_impl->sheetPattern);
-            if (StartSheet())
-                return true;
+            if (!m_impl->namePattern.empty())
+            {
+                LOG4CXX_DEBUG(m_impl->log, "StartBook: " << " name " << m_impl->namePattern);
+                auto name = m_impl->currentBook.GetName(m_impl->namePattern);
+                if (name.IsValid())
+                {
+                    m_impl->rowIter.Start(name);
+                    if (SetItem())
+                        return true;
+                }
+                else
+                {
+                    LOG4CXX_WARN(m_impl->log, "Failed to find " << m_impl->namePattern << " in "  << m_impl->fileIter->Item());
+                }
+            }
+            else
+            {
+                m_impl->sheetIter.Start(m_impl->currentBook, m_impl->sheetPattern);
+                if (StartSheet())
+                    return true;
+            }
         }
         else
         {
@@ -86,6 +119,7 @@ bool CellRowIterator::StartBook()
 /// Set m_impl->rowIter to a sheet row
 bool CellRowIterator::StartSheet()
 {
+    LOG4CXX_TRACE(m_impl->log, "StartSheet: ");
     while (!m_impl->sheetIter.Off())
     {
         LOG4CXX_DEBUG(m_impl->log, "StartSheet: " << m_impl->sheetIter.Item().GetName());
@@ -175,7 +209,7 @@ void SheetIterator::StartBook()
 void SheetIterator::SetItem()
 {
     auto name = m_impl->sheetIter.Item().GetName();
-    LOG4CXX_TRACE(m_impl->log, "At: " << name);
+    LOG4CXX_DEBUG(m_impl->log, "At: " << name);
     m_item.back() = name;
 }
 

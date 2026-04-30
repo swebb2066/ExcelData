@@ -20,6 +20,7 @@ public: // ...structors
 
 public: // Property modifiers
     void PutCellPattern(const std::string& cells);
+    void PutNamePattern(const std::string& names);
 
 public: // Accessors
     /// Is this iterator beyond the end or before the start?

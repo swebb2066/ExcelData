@@ -12,43 +12,49 @@ Allowed options:
 | | mapping the input yaml to the output comma separated values. |
 | | See [Map file syntax] for details. |
 | | |
-|  -p [ --map-params ] arg | The name of a file containing a (yaml format) list of parameter values. |
+|  -p [ --map-params ] arg | The name of a file containing a (yaml format) list of parameter values from which combinations are constructed. |
 | | See [Parameter file syntax] for details. |
 
 Map file syntax
 ===============
 
-Each element in the input list has a variable name and path to the value.
-Each element in the output list specifies a name and a value (optionally as a reverse polish calculation).
+Each element in the input section nominates the file path pattern and the data to extract.
 
-Example 1: Extract all transaction sheets
+Example 1: Extract the Transactions sheet from all selected workbooks
 ----------
 ```yaml
-Parameters:
+Input:
+  Path: "2[0-9]06 Personal Expenses.xls"
+  Sheet: Transactions
+---
+````
+
+Example 2: Extract a named cell range from all selected workbooks
+----------
+```yaml
+Input:
+  Path: "2[0-9]06 Personal Expenses.xls"
+  Name: Sum_of_Amounts
+---
+````
+
+Example 3: Extract the Transactions sheet from all selected workbooks using all combinations of Location and NamePrefix
+----------
+```yaml
+ParameterCombinations:
   - Name: NamePrefix
     Value: [19, 20]
   - Name: Location
     Value: [Family Trust, Super Fund]
+Parameters:\n"
+  - &NamePrefix xxxxx
+  - &Location xxxxx
 Input:
   Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
   Sheet: Transactions
 ---
 ````
 
-Example 2: Extract a cell range from transaction sheets
-----------
-```yaml
-Parameters:
-  - Name: NamePrefix
-    Value: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
-  - Name: Location
-    Value: [Family Trust, Super Fund]
-Input:
-  Path: [*Location, "*/", *NamePrefix, " Personal Expenses.xls"]
-  Sheet: Transactions
-  Cells: A1:D999
----
-````
 Parameter file syntax
 =====================
 

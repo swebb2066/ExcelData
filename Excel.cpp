@@ -12,10 +12,19 @@
 #include "Excel.h"
 #include <Foundation/SafeArrayWrapper.h>
 #include <Foundation/Logger.h>
-#include "comutil.h"
+#include <comutil.h>
+#include <comdef.h>
 
 namespace
 {
+
+void logException(const Foundation::LoggerPtr& logCategory, const EXCEPINFO& excepInfo, const char* context)
+{
+    LOG4CXX_WARN(logCategory, "Exception: " << (const char*)_bstr_t(excepInfo.bstrDescription) << " accessing " << context);
+    SysFreeString(excepInfo.bstrDescription);
+    SysFreeString(excepInfo.bstrSource);
+    SysFreeString(excepInfo.bstrHelpFile);
+}
 
 void logMembers(const Foundation::LoggerPtr& log, IDispatch* pObj, LCID lcid)
 {
@@ -199,11 +208,26 @@ int GetDispatchCount(IDispatch* pObject, LCID lcid)
         return vResult;
 }
 
+// The number for \c methodName to use in Invoke calls
+DISPID GetMethodId(IDispatch* pObject, const _bstr_t& methodName, LCID lcid, const std::string& objectName)
+{
+    LPOLESTR itemMethodName = SysAllocString(methodName);
+    DISPID   dispidItem;
+    HRESULT hr = pObject->GetIDsOfNames(IID_NULL, &itemMethodName, 1, lcid, &dispidItem);
+    SysFreeString(itemMethodName);
+    if (FAILED(hr))
+    {
+        LOG4CXX_WARN(Foundation::GetLogger("OLE." + objectName),
+                     "GetIDsOfNames failed for " << (const char*)itemMethodName << ": 0x" << std::hex << hr);
+        return 0;
+    }
+    return dispidItem;
+}
+
 // Member Get Item <170> (In Index As Variant<0>) As IDispatch
 IDispatch* GetDispatchItem(IDispatch* pObject, int item, LCID lcid, const std::string& objectName)
 {
     VARIANT         vResult;
-    HRESULT         hr;
     VARIANT         vArgArray[1];
     DISPPARAMS      DispParams;
     DISPID          dispidNamed;
@@ -215,9 +239,53 @@ IDispatch* GetDispatchItem(IDispatch* pObject, int item, LCID lcid, const std::s
     DispParams.rgdispidNamedArgs   = &dispidNamed;
     DispParams.cArgs               = 1;
     DispParams.cNamedArgs          = 0;
-    if (FAILED(pObject->Invoke(0xAA,IID_NULL,lcid,DISPATCH_PROPERTYGET,&DispParams,&vResult,NULL,NULL)))
+    if (FAILED(pObject->Invoke(0xAA, IID_NULL, lcid, DISPATCH_PROPERTYGET, &DispParams, &vResult, NULL, NULL)))
         return NULL;
-    logMembers(Foundation::GetLogger("OLE." + objectName + ".Item"), vResult.pdispVal, lcid);
+    logMembers(Foundation::GetLogger("OLE." + objectName), vResult.pdispVal, lcid);
+    return vResult.pdispVal;
+}
+
+
+// Member gt \c item As IDispatch using Item
+// In VBA, Collection(index) with parentheses calls DISPID_VALUE (0).
+IDispatch* GetDispatchItem(IDispatch* pObject, const _bstr_t& item, LCID lcid, const std::string& objectName)
+{
+    VARIANT         vResult;
+    VARIANT         vArgArray[1];
+    DISPPARAMS      DispParams;
+    EXCEPINFO       excepInfo;
+    UINT            argErr = 0;
+
+    VariantInit(&vResult);
+    memset(&excepInfo, 0, sizeof(excepInfo));
+
+    VariantInit(&vArgArray[0]);
+    vArgArray[0].vt = VT_BSTR;
+    vArgArray[0].bstrVal = SysAllocString(item);
+
+    DispParams.rgvarg            = vArgArray;
+    DispParams.rgdispidNamedArgs = NULL;
+    DispParams.cArgs             = 1;
+    DispParams.cNamedArgs        = 0;
+
+    HRESULT hr = pObject->Invoke(DISPID_VALUE, IID_NULL, lcid,
+                                 DISPATCH_METHOD | DISPATCH_PROPERTYGET,
+                                 &DispParams, &vResult, &excepInfo, &argErr);
+    SysFreeString(vArgArray[0].bstrVal);
+
+    auto logCategory = Foundation::GetLogger("OLE." + objectName);
+    if (FAILED(hr))
+    {
+        if (hr == DISP_E_EXCEPTION && excepInfo.bstrDescription)
+            logException(logCategory, excepInfo, item);
+        else
+        {
+            LOG4CXX_WARN(logCategory, "Invoke failed with HRESULT: 0x" << std::hex << hr);
+        }
+        return NULL;
+    }
+
+    logMembers(logCategory, vResult.pdispVal, lcid);
     return vResult.pdispVal;
 }
 
@@ -246,13 +314,16 @@ struct Book::Impl
 {
     IDispatch* pXLWorkBook;
     IDispatch* pXLWorkSheets;
+    IDispatch* pXLNames;
     Impl()
         : pXLWorkBook(NULL)
         , pXLWorkSheets(NULL)
+        , pXLNames(NULL)
     {
     }
     ~Impl()
     {
+        if (pXLNames) pXLNames->Release();
         if (pXLWorkSheets) pXLWorkSheets->Release();
         if (pXLWorkBook)
         {
@@ -315,6 +386,8 @@ auto Book::Load(const fs::path& path) -> bool
         logMembers(Foundation::GetLogger("OLE.Workbook"), m_impl->pXLWorkBook, GetInstance().lcid);
         m_impl->pXLWorkSheets = GetDispatchObject(m_impl->pXLWorkBook, 494, DISPATCH_PROPERTYGET, GetInstance().lcid, "Worksheets");
         result = !!m_impl->pXLWorkSheets;
+        m_impl->pXLNames = GetDispatchObject(m_impl->pXLWorkBook, 442, DISPATCH_PROPERTYGET, GetInstance().lcid, "Names");
+        result = !!m_impl->pXLNames;
     }
     return result;
 }
@@ -327,6 +400,11 @@ auto Book::IsValid() const -> bool
 auto Book::GetSheetCount() const -> int
 {
     return IsValid() ? GetDispatchCount(m_impl->pXLWorkSheets, GetInstance().lcid) : 0;
+}
+
+auto Book::GetNameCount() const -> int
+{
+    return m_impl->pXLNames ? GetDispatchCount(m_impl->pXLNames, GetInstance().lcid) : 0;
 }
 
 void Book::Unload()
@@ -377,6 +455,82 @@ auto Book::GetSheet(const std::regex& selector, int afterItem) const -> SheetPos
     return result;
 }
 
+struct Name::Impl
+{
+    IDispatch* pXLName;
+    std::string name;
+    Impl(IDispatch* pObj = NULL)
+        : pXLName(pObj)
+    {
+    }
+    ~Impl()
+    {
+        if (pXLName) pXLName->Release();
+    }
+};
+
+auto Book::GetName(int item) const -> Name
+{
+    Name result;
+    if (result.m_impl->pXLName = GetDispatchItem(m_impl->pXLNames, item, GetInstance().lcid, "Name"))
+    {
+        result.m_impl->name = GetDispatchString(result.m_impl->pXLName, 110, GetInstance().lcid);
+    }
+    return result;
+}
+
+auto Book::GetName(const std::string& item) const -> Name
+{
+    Name result;
+    if (result.m_impl->pXLName = GetDispatchItem(m_impl->pXLNames, item.c_str(), GetInstance().lcid, "Name"))
+    {
+        result.m_impl->name = GetDispatchString(result.m_impl->pXLName, 110, GetInstance().lcid);
+    }
+    return result;
+}
+
+auto Book::GetName(const std::regex& selector, int afterItem) const -> NamePosition
+{
+    NamePosition result;
+    auto nameCount = GetNameCount();
+    for (result.second = afterItem + 1; result.second <= nameCount; ++result.second)
+    {
+        auto item = GetName(result.second);
+        if (item.IsValid())
+        {
+            if (std::regex_match(item.GetName(), selector))
+            {
+                result.first = item;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
+Name::Name() : m_impl(std::make_shared<Impl>())
+{
+}
+
+Name::~Name()
+{
+}
+
+auto Name::operator==(const Name& other) const -> bool
+{
+    return m_impl && other.m_impl && other.m_impl->pXLName == m_impl->pXLName;
+}
+
+bool Name::IsValid() const
+{
+    return m_impl && m_impl->pXLName;
+}
+
+auto Name::GetName() const -> std::string
+{
+    return m_impl->name;
+}
+
 Sheet::Sheet() : m_impl(std::make_shared<Impl>())
 {
 }
@@ -403,9 +557,15 @@ auto Sheet::GetName() const -> std::string
 struct Rows::Impl
 {
     Sheet clx;
+    Name name;
     IDispatch* pXLRows;
     Impl(const Sheet& parent)
         : clx(parent)
+        , pXLRows(NULL)
+    {
+    }
+    Impl(const Name& parent)
+        : name(parent)
         , pXLRows(NULL)
     {
     }
@@ -414,6 +574,19 @@ struct Rows::Impl
         if (pXLRows) pXLRows->Release();
     }
 };
+
+auto Name::GetRows() const -> Rows
+{
+    static const int RefersToRange = 1160;
+    Rows result(*this);
+    result.m_impl->pXLRows = GetDispatchObject(m_impl->pXLName, RefersToRange, DISPATCH_PROPERTYGET, GetInstance().lcid, "Rows");
+    return result;
+}
+
+auto Name::GetRows(const std::regex& selector) const -> RowsPosition
+{
+    return RowsPosition(GetRows(), 0);
+}
 
 auto Sheet::GetRows() const -> Rows
 {
@@ -432,6 +605,7 @@ struct Sheet::Iterator::Impl
     Book clx;
     std::optional<std::regex> selector;
     SheetPosition current;
+	Foundation::LoggerPtr log = Foundation::GetLogger("Excel.Sheet.Iterator");
 };
 
 Sheet::Iterator::Iterator() : m_impl(std::make_shared<Impl>())
@@ -453,6 +627,7 @@ Sheet::Iterator::Off() const
     void
 Sheet::Iterator::Start(const Book& book, const std::string& sheetPattern)
 {
+	LOG4CXX_DEBUG(m_impl->log, "Start:" << " sheetPattern " << sheetPattern);
     m_impl->clx = book;
     if (sheetPattern.empty())
         m_impl->selector.reset();
@@ -473,6 +648,8 @@ Sheet::Iterator::Start()
         m_impl->current.first = m_impl->clx.GetSheet(1);
     }
     m_item = m_impl->current.first;
+	if (m_item.IsValid())
+		LOG4CXX_DEBUG(m_impl->log, "At: " << m_item.GetName());
 }
 
 // Move to the next sheet. Precondition: !Off()
@@ -485,6 +662,8 @@ Sheet::Iterator::Forth()
     else
         m_impl->current.first = m_impl->clx.GetSheet(m_impl->current.second);
     m_item = m_impl->current.first;
+	if (m_item.IsValid())
+		LOG4CXX_DEBUG(m_impl->log, "At: " << m_item.GetName());
 }
 
 Rows::Rows()
@@ -495,6 +674,9 @@ Rows::Rows(const Sheet& parent) : m_impl(std::make_shared<Impl>(parent))
 {
 }
 
+Rows::Rows(const Name& parent) : m_impl(std::make_shared<Impl>(parent))
+{
+}
 Rows::~Rows()
 {
 }
@@ -517,8 +699,13 @@ void Rows::Reset()
 struct Rows::Iterator::Impl
 {
     RowsPosition current;
+	Foundation::LoggerPtr log = Foundation::GetLogger("Excel.Rows.Iterator");
     Impl(const Sheet& sheet)
         : current(sheet.GetRows(), 0)
+    {
+    }
+    Impl(const Name& name)
+        : current(name.GetRows(), 0)
     {
     }
 };
@@ -536,6 +723,14 @@ Rows::Iterator::~Iterator()
 Rows::Iterator::Off() const
 {
     return m_item.empty();
+}
+
+// Move to the first row in \c name
+    void
+Rows::Iterator::Start(const Name& name)
+{
+    m_impl = std::make_shared<Impl>(name);
+    Start();
 }
 
 // Move to the first row in \c sheet
@@ -609,11 +804,21 @@ auto Cells::GetData() const -> CellRow
     {
         auto pItem = GetDispatchItem(m_impl->pXLCells, 1, GetInstance().lcid, "Cells");
         _variant_t itemData;
-        if (pItem && GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData) && (VT_ARRAY|VT_VARIANT) == itemData.vt)
+        if (!pItem || !GetDispatchVariant(pItem, 6, GetInstance().lcid, &itemData))
+            ;
+        else if ((VT_ARRAY|VT_VARIANT) == itemData.vt)
         {
             SafeArrayData sa(itemData.parray);
             m_impl->data.resize(sa.DimensionSize(1));
             sa.GetStringVector(m_impl->data.begin(), m_impl->data.end());
+        }
+        else try
+        {
+            m_impl->data.push_back((const char*)_bstr_t(itemData));
+        }
+        catch (const _com_error& ex)
+        {
+            LOG4CXX_WARN(Foundation::GetLogger("OLE.Cells"), "Not convertable to string: 0x" << std::hex << ex.Error());
         }
         while (!m_impl->data.empty())
         {

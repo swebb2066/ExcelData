@@ -1,4 +1,5 @@
 #include <Foundation/Environment.h>
+#include <Foundation/Yaml.h>
 #include <Foundation/YamlDocument.h>
 #include <Foundation/Logger.h>
 #include <Foundation/LogMessages.h>
@@ -41,31 +42,33 @@ static const char* inputPatternParam =
 
 static const char* mapFileParam =
 "The name (default excel2csv.yaml) of a (yaml format) file\n"
-"mapping the input yaml to the output comma separated values.\n"
-"Each element in the input list has a variable name and path to the value.\n"
-"Each element in the output list specifies a name and a value (optionally as a reverse polish calculation).\n"
-"Example 1: Extract all transaction sheets\n"
+"mapping the data from Excel to output as comma separated values.\n"
+"Each element in the input section has a file path and the data to extract.\n"
+"Example 1: Extract the Transactions sheet from all selected workbooks\n"
 "----------\n"
-"Parameters:\n"
+"Input:\n"
+"  Path: \"2[0-9]06 Personal Expenses.xls\"\n"
+"  Sheet: Transactions\n"
+"---\n"
+"Example 2: Extract the named cells (Sum_of_Amounts) from all selected workbooks\n"
+"----------\n"
+"Input:\n"
+"  Path: \"2[0-9]06 Personal Expenses.xls\"\n"
+"  Name: Sum_of_Amounts\n"
+"---\n"
+"Example 3: Extract the Transactions sheet from all selected workbooks using all combinations of Location and NamePrefix\n"
+"----------\n"
+"ParameterCombinations:\n"
 "- Name: NamePrefix\n"
 "  Value: [19, 20]\n"
 "- Name: Location\n"
 "  Value: [Family Trust, Super Fund]\n"
-"Input:\n"
-"  Path: [*Location, \"*/\", *NamePrefix, \" Personal Expenses.xls\"]\n"
-"  Sheet: Transactions\n"
-"---\n"
-"Example 2: Extract a cell range from transaction sheets\n"
-"----------\n"
 "Parameters:\n"
-"- Name: NamePrefix\n"
-"  Value: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]\n"
-"- Name: Location\n"
-"  Value: [Family Trust, Super Fund]\n"
+"  - &Location xxxxxx\n"
+"  - &Dataset dddddd\n"
 "Input:\n"
 "  Path: [*Location, \"*/\", *NamePrefix, \" Personal Expenses.xls\"]\n"
 "  Sheet: Transactions\n"
-"  Cells: A1:D999\n"
 "---\n"
 ;
 
@@ -212,11 +215,14 @@ namespace fs = std::filesystem;
 auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
 {
     static auto log_s(Foundation::GetLogger("excel2csv.GetIterator"));
+    auto rootDir = dir.empty() ? fs::current_path() : dir;
+    LOG4CXX_DEBUG(log_s, "rootDir " << rootDir);
+	if (!yaml.IsMap())
+		throw YAML::RequiredItemType(yaml.Mark(), "Map", "Input");
     std::string namePattern("*(.xls|.xlsx)"); // All Excel files in dir
     if (auto fileSelector = yaml["Path"])
         namePattern = GetPattern(fileSelector, namePattern);
-    auto rootDir = dir.empty() ? fs::current_path() : dir;
-    LOG4CXX_DEBUG(log_s, "namePattern " << namePattern << " in " << rootDir);
+    LOG4CXX_DEBUG(log_s, "namePattern " << namePattern);
     auto selector = std::make_shared<Foundation::PathSelector>(namePattern, rootDir);
     IteratorPtr result;
     if (auto sheets = yaml["Sheet"])
@@ -226,6 +232,13 @@ auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
             rowIter->PutCellPattern(GetPattern(cells));
         result = std::move(rowIter);
     }
+    else if (auto nameNode = yaml["Name"])
+	{
+        auto namePattern = GetPattern(nameNode);
+        auto rowIter = std::make_unique<Excel::CellRowIterator>(std::make_unique<Foundation::FileIterator>(rootDir, selector), namePattern);
+		rowIter->PutNamePattern(namePattern);
+        result = std::move(rowIter);
+	}
     else
         result = std::make_unique<Excel::SheetIterator>(std::make_unique<Foundation::FileIterator>(rootDir, selector));
     return result;
@@ -236,9 +249,10 @@ auto GetIterator(const fs::path& dir, const YAML::Node& yaml) -> IteratorPtr
 ProcessDocuments(std::ostream& os, const fs::path& inputPath, const YAML::DocumentTemplate& mapping)
 {
     static auto log_s(Foundation::GetLogger("excel2csv.ProcessDocuments"));
+    LOG4CXX_DEBUG(log_s, "inputPath " << inputPath);
     auto mappingData = mapping.GetOriginalData();
     auto mappingDoc = mapping.GetOriginalDocument();
-    auto input = GetIterator(inputPath, mappingData["Input"]);
+    auto input = GetIterator(inputPath, YAML::ReqNode(mappingData, "Input"));
     auto output = mappingData["Output"];
     std::vector<std::string> lastKey;
     for (input->Start(); !input->Off(); input->Forth())
