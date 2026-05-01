@@ -41,8 +41,8 @@ public: // Methods
     void Unload();
 };
 
-class Rows;
-using RowsPosition = std::pair<Rows, int>;
+class Range;
+using RangePosition = std::pair<Range, int>;
 
 class Name
 {
@@ -55,14 +55,16 @@ public: // Accessors
     bool operator==(const Name& other) const;
     bool IsValid() const;
     auto GetName() const -> std::string;
-    auto GetRows() const -> Rows;
-    auto GetRows(const std::regex& selector) const -> RowsPosition;
+    auto GetRange() const -> Range;
 public: // Methods
     /// Release the current name.
     void Reset();
 public: // Inner classes
     friend class Book;
 };
+
+class Rows;
+using RowsPosition = std::pair<Rows, int>;
 
 class Sheet
 {
@@ -113,7 +115,6 @@ private: // Attributes
 public: // ...structors
     Rows();
     Rows(const Sheet& parent);
-    Rows(const Name& parent);
     ~Rows();
 public: // Accessors
     bool operator==(const Rows& other) const;
@@ -125,7 +126,6 @@ public: // Methods
 public: // Inner classes
     class Iterator;
     friend class Sheet;
-    friend class Name;
 };
 
 using CellRow = std::vector<std::string>;
@@ -135,13 +135,12 @@ private: // Attributes
     DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
 public: // ...structors
     Iterator();
+    Iterator(const Sheet& sheet);
     ~Iterator();
 public: // Accessors
     /// Is this iterator beyond the end or before the start?
     bool Off() const override;
 public: // Methods
-    /// Move to the first row in \c name
-    void Start(const Name& name);
     /// Move to the first row in \c sheet
     void Start(const Sheet& sheet);
     /// Move to the first row
@@ -166,6 +165,49 @@ public: // Accessors
 public: // Methods
 public: // Inner classes
     friend class Rows;
+};
+
+class Range
+{
+private: // Attributes
+    DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
+public: // ...structors
+    Range();
+    Range(const Name& parent);
+    ~Range();
+public: // Accessors
+    bool operator==(const Range& other) const;
+    bool IsValid() const;
+    auto GetRow(int row) const -> CellRow;
+    auto GetRowCount() const -> int;
+public: // Methods
+    /// Release the current range.
+    void Reset();
+public: // Inner classes
+    class Iterator;
+    friend class Name;
+};
+
+class Range::Iterator : public Foundation::Iterator<CellRow>
+{
+private: // Attributes
+    DECLARE_PRIVATE_MEMBER_PTR(Impl, m_impl);
+public: // ...structors
+    Iterator();
+    Iterator(const Name& name);
+    ~Iterator();
+public: // Accessors
+    /// Is this iterator beyond the end or before the start?
+    bool Off() const override;
+public: // Methods
+    /// Move to the first row in \c name
+    void Start(const Name& name);
+    /// Move to the first row
+    void Start() override;
+    /// Move to the next row. Precondition: !Off()
+    void Forth() override;
+public: // Inner classes
+    friend class Range;
 };
 
 } // namespace Excel

@@ -557,15 +557,9 @@ auto Sheet::GetName() const -> std::string
 struct Rows::Impl
 {
     Sheet clx;
-    Name name;
     IDispatch* pXLRows;
     Impl(const Sheet& parent)
         : clx(parent)
-        , pXLRows(NULL)
-    {
-    }
-    Impl(const Name& parent)
-        : name(parent)
         , pXLRows(NULL)
     {
     }
@@ -574,19 +568,6 @@ struct Rows::Impl
         if (pXLRows) pXLRows->Release();
     }
 };
-
-auto Name::GetRows() const -> Rows
-{
-    static const int RefersToRange = 1160;
-    Rows result(*this);
-    result.m_impl->pXLRows = GetDispatchObject(m_impl->pXLName, RefersToRange, DISPATCH_PROPERTYGET, GetInstance().lcid, "Rows");
-    return result;
-}
-
-auto Name::GetRows(const std::regex& selector) const -> RowsPosition
-{
-    return RowsPosition(GetRows(), 0);
-}
 
 auto Sheet::GetRows() const -> Rows
 {
@@ -674,9 +655,6 @@ Rows::Rows(const Sheet& parent) : m_impl(std::make_shared<Impl>(parent))
 {
 }
 
-Rows::Rows(const Name& parent) : m_impl(std::make_shared<Impl>(parent))
-{
-}
 Rows::~Rows()
 {
 }
@@ -704,14 +682,16 @@ struct Rows::Iterator::Impl
         : current(sheet.GetRows(), 0)
     {
     }
-    Impl(const Name& name)
-        : current(name.GetRows(), 0)
-    {
-    }
 };
 
 Rows::Iterator::Iterator()
 {
+}
+
+Rows::Iterator::Iterator(const Sheet& sheet)
+    : m_impl{ std::make_shared<Impl>(sheet) }
+{
+    Start();
 }
 
 Rows::Iterator::~Iterator()
@@ -723,14 +703,6 @@ Rows::Iterator::~Iterator()
 Rows::Iterator::Off() const
 {
     return m_item.empty();
-}
-
-// Move to the first row in \c name
-    void
-Rows::Iterator::Start(const Name& name)
-{
-    m_impl = std::make_shared<Impl>(name);
-    Start();
 }
 
 // Move to the first row in \c sheet
@@ -771,6 +743,7 @@ struct Cells::Impl
     {
         if (pXLCells) pXLCells->Release();
     }
+    Foundation::LoggerPtr log = Foundation::GetLogger("OLE.Cells");
 };
 
 auto Rows::GetCells(int row) const -> Cells
@@ -818,7 +791,7 @@ auto Cells::GetData() const -> CellRow
         }
         catch (const _com_error& ex)
         {
-            LOG4CXX_WARN(Foundation::GetLogger("OLE.Cells"), "Not convertable to string: 0x" << std::hex << ex.Error());
+            LOG4CXX_WARN(m_impl->log, "Not convertable to string: 0x" << std::hex << ex.Error());
         }
         while (!m_impl->data.empty())
         {
@@ -826,10 +799,161 @@ auto Cells::GetData() const -> CellRow
                 break;
             m_impl->data.pop_back();
         }
-        if (pItem)
-            pItem->Release();
     }
     return m_impl->data;
+}
+
+struct Range::Impl
+{
+    Name name;
+    IDispatch* pXLRange;
+    _variant_t var;
+    SafeArrayData data;
+    Impl(const Name& parent)
+        : name(parent)
+        , pXLRange(NULL)
+    {
+    }
+    ~Impl()
+    {
+        if (pXLRange) pXLRange->Release();
+    }
+    Foundation::LoggerPtr log = Foundation::GetLogger("OLE.Range");
+
+    void setData()
+    {
+        if (!this->pXLRange)
+            ;
+        else if (!GetDispatchVariant(this->pXLRange, 6, GetInstance().lcid, &this->var))
+            LOG4CXX_WARN(this->log, "Failed to get data");
+        else if ((VT_ARRAY|VT_VARIANT) == this->var.vt)
+           this->data = this->var.parray;
+    }
+};
+
+auto Name::GetRange() const -> Range
+{
+    static const int RefersToRange = 1160;
+    Range result(*this);
+    result.m_impl->pXLRange = GetDispatchObject(m_impl->pXLName, RefersToRange, DISPATCH_PROPERTYGET, GetInstance().lcid, "Range");
+    return result;
+}
+
+Range::Range()
+{
+}
+
+Range::Range(const Name& parent) : m_impl(std::make_shared<Impl>(parent))
+{
+}
+
+Range::~Range()
+{
+}
+
+auto Range::operator==(const Range& other) const -> bool
+{
+    return other.m_impl && m_impl && other.m_impl->pXLRange == m_impl->pXLRange;
+}
+
+auto Range::IsValid() const -> bool
+{
+    return m_impl && m_impl->pXLRange;
+}
+
+void Range::Reset()
+{
+    m_impl.reset();
+}
+
+auto Range::GetRowCount() const -> int
+{
+    if (!m_impl->data.IsValid())
+        m_impl->setData();
+    return m_impl->data.IsValid()
+        ? m_impl->data.DimensionSize(1)
+        : VT_EMPTY == m_impl->var.vt
+        ? 0
+        : 1;
+}
+
+auto Range::GetRow(int row) const -> CellRow
+{
+    if (!m_impl->data.IsValid())
+        m_impl->setData();
+    CellRow result;
+    if (m_impl->data.IsValid())
+    {
+        result.resize(m_impl->data.DimensionSize(1));
+        m_impl->data.GetStringVector(row, result.begin(), result.end());
+    }
+    else try
+    {
+        result.push_back((const char*)_bstr_t(m_impl->var));
+    }
+    catch (const _com_error& ex)
+    {
+        LOG4CXX_WARN(m_impl->log, "Not convertable to string: 0x" << std::hex << ex.Error());
+    }
+    return result;
+}
+
+struct Range::Iterator::Impl
+{
+    RangePosition current;
+	Foundation::LoggerPtr log = Foundation::GetLogger("Excel.Range.Iterator");
+    Impl(const Name& name)
+        : current(name.GetRange(), 0)
+    {
+    }
+};
+
+Range::Iterator::Iterator()
+{
+}
+
+Range::Iterator::Iterator(const Name& name)
+    : m_impl{ std::make_shared<Impl>(name) }
+{
+    Start();
+}
+
+Range::Iterator::~Iterator()
+{
+}
+
+// Is this iterator beyond the end or before the start?
+    bool
+Range::Iterator::Off() const
+{
+    return !m_impl->current.first.IsValid() || m_impl->current.first.GetRowCount() < m_impl->current.second;
+}
+
+// Move to the first row in \c name
+    void
+Range::Iterator::Start(const Name& name)
+{
+    m_impl = std::make_shared<Impl>(name);
+    Start();
+}
+
+// Move to the first row
+    void
+Range::Iterator::Start()
+{
+    m_impl->current.second = 1;
+    m_item = m_impl->current.first.GetRow(1);
+}
+
+
+// Move to the next row. Precondition: !Off()
+    void
+Range::Iterator::Forth()
+{
+    ++m_impl->current.second;
+    m_item = m_impl->current.first.GetRow(m_impl->current.second);
+    if (Off())
+        m_impl->current.first.Reset();
 }
 
 } // namespace Excel

@@ -5,6 +5,8 @@
 
 namespace Excel
 {
+using RowIterator = Foundation::Iterator<CellRow>;
+using RowIteratorPtr = std::shared_ptr<RowIterator>;
 
 struct CellRowIterator::Impl
 {
@@ -12,9 +14,9 @@ struct CellRowIterator::Impl
     Book currentBook;
     Sheet::Iterator sheetIter;
     std::string sheetPattern;
-    Rows::Iterator rowIter;
     std::string cellPattern;
     std::string namePattern;
+    RowIteratorPtr rowIter;
     Impl(FileIteratorPtr xlFileSource, const std::string& sheetPattern_)
         : fileIter(std::move(xlFileSource))
         , sheetPattern(sheetPattern_)
@@ -55,8 +57,8 @@ void CellRowIterator::Start()
 void CellRowIterator::Forth()
 {
     m_item.clear();
-    m_impl->rowIter.Forth();
-    if (!m_impl->rowIter.Off())
+    m_impl->rowIter->Forth();
+    if (!m_impl->rowIter->Off())
         SetItem();
     else if (m_impl->namePattern.empty())
     {
@@ -91,7 +93,7 @@ bool CellRowIterator::StartBook()
                 auto name = m_impl->currentBook.GetName(m_impl->namePattern);
                 if (name.IsValid())
                 {
-                    m_impl->rowIter.Start(name);
+                    m_impl->rowIter = std::make_shared<Range::Iterator>(name);
                     if (SetItem())
                         return true;
                 }
@@ -123,19 +125,19 @@ bool CellRowIterator::StartSheet()
     while (!m_impl->sheetIter.Off())
     {
         LOG4CXX_DEBUG(m_impl->log, "StartSheet: " << m_impl->sheetIter.Item().GetName());
-        m_impl->rowIter.Start(m_impl->sheetIter.Item());
-        if (!m_impl->rowIter.Off() && SetItem())
+        m_impl->rowIter = std::make_shared<Rows::Iterator>(m_impl->sheetIter.Item());
+        if (!m_impl->rowIter->Off() && SetItem())
             return true;
         m_impl->sheetIter.Forth();
     }
     return false;
 }
 
-/// Set m_item. Precondition: !m_impl->rowIter.Off()
+/// Set m_item. Precondition: !m_impl->rowIter->Off()
 bool CellRowIterator::SetItem()
 {
-    m_item = m_impl->rowIter.Item();
-    LOG4CXX_TRACE(m_impl->log, "At: " << m_impl->rowIter.Item());
+    m_item = m_impl->rowIter->Item();
+    LOG4CXX_TRACE(m_impl->log, "At: " << m_impl->rowIter->Item());
     return !m_item.empty();
 }
 

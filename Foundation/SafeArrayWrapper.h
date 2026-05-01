@@ -218,6 +218,17 @@ public: // Accessors
         return i - begin;
     }
 
+    /// Get elements from \c row (in [1..DimensionSize(1)]) into the range \c begin to \c end
+    template <typename OutIter>
+    size_t GetStringVector(long row, OutIter begin, OutIter end)
+    {
+        long index[2] = { row + m_lBound[0] - 1, m_lBound[1] };
+        OutIter i = begin;
+        for (; i != end && index[1] <= m_uBound[1]; ++index[1])
+            GetElement<std::string, _bstr_t>(index, *i++);
+        return i - begin;
+    }
+
 public: // Methods
     /// Output as text to \c os
     void Write(std::ostream& os) const

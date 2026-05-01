@@ -9,7 +9,7 @@ Allowed options:
 |  -r [ --input-root ] arg | The directory to search for input data. |
 | | |
 |  -m [ --map-file ] arg |  The name (default excel2csv.yaml) of a (yaml format) file |
-| | mapping the input yaml to the output comma separated values. |
+| | specifying the data to extract from Excel that is to be to output as comma separated values. |
 | | See [Map file syntax] for details. |
 | | |
 |  -p [ --map-params ] arg | The name of a file containing a (yaml format) list of parameter values from which combinations are constructed. |
@@ -46,7 +46,7 @@ ParameterCombinations:
     Value: [19, 20]
   - Name: Location
     Value: [Family Trust, Super Fund]
-Parameters:\n"
+Parameters:
   - &NamePrefix xxxxx
   - &Location xxxxx
 Input:
