@@ -868,7 +868,7 @@ void Range::Reset()
 
 auto Range::GetRowCount() const -> int
 {
-    if (!m_impl->data.IsValid())
+    if (VT_EMPTY == m_impl->var.vt)
         m_impl->setData();
     return m_impl->data.IsValid()
         ? m_impl->data.DimensionSize(1)
@@ -879,7 +879,7 @@ auto Range::GetRowCount() const -> int
 
 auto Range::GetRow(int row) const -> CellRow
 {
-    if (!m_impl->data.IsValid())
+    if (VT_EMPTY == m_impl->var.vt)
         m_impl->setData();
     CellRow result;
     if (m_impl->data.IsValid())
